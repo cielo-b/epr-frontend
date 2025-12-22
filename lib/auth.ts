@@ -55,4 +55,10 @@ export const authService = {
     }
     return response.data;
   },
+
+  setUser(user: User): void {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("user", JSON.stringify(user));
+    }
+  },
 };

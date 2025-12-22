@@ -11,6 +11,7 @@ import { AppShell } from "@/components/AppShell";
 type UserDetails = User & {
   createdAt?: string;
   updatedAt?: string;
+  isActive?: boolean;
 };
 
 export default function ProfilePage() {
