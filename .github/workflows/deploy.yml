@@ -58,10 +58,11 @@ jobs:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           # 1. Transfer File
-          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ secrets.SSH_PORT }} deploy.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/deploy-frontend.tar.gz
+          # Using hardcoded port 225 as fallback/fix
+          sshpass -e scp -o StrictHostKeyChecking=no -P 225 deploy.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/deploy-frontend.tar.gz
 
           # 2. Extract and Restart
-          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          sshpass -e ssh -o StrictHostKeyChecking=no -p 225 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
             export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
             
             # Setup directories
