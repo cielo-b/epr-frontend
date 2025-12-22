@@ -1,0 +1,98 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Next.js app
+        run: pnpm build
+        env:
+          NODE_ENV: production
+          # Add other build-time env vars here if needed
+          # NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy
+          cp -r .next deploy/
+          cp -r public deploy/
+          cp package.json deploy/
+          cp pnpm-lock.yaml deploy/
+          cp next.config.js deploy/ 2>/dev/null || true
+          cp next.config.mjs deploy/ 2>/dev/null || true
+          cp next.config.ts deploy/ 2>/dev/null || true
+          # Add tailwind/postcss config if they exist
+          cp tailwind.config.ts deploy/ 2>/dev/null || true
+          cp postcss.config.js deploy/ 2>/dev/null || true
+          tar -czf deploy.tar.gz -C deploy .
+
+      - name: Deploy to Server
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          # 1. Transfer File
+          sshpass -e scp -o StrictHostKeyChecking=no -P ${{ secrets.SSH_PORT }} deploy.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/${{ secrets.SSH_USER }}/deploy-frontend.tar.gz
+
+          # 2. Extract and Restart
+          sshpass -e ssh -o StrictHostKeyChecking=no -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+            
+            # Setup directories
+            mkdir -p /home/${{ secrets.SSH_USER }}/rm-soft/frontend
+            cd /home/${{ secrets.SSH_USER }}/rm-soft
+
+            # Backup existing
+            if [ -d "frontend/.next" ]; then
+              mkdir -p backups/frontend
+              tar -czf backups/frontend/backup-$(date +%Y%m%d-%H%M%S).tar.gz frontend/.next 2>/dev/null || true
+            fi
+            
+            # Extract
+            tar -xzf /home/${{ secrets.SSH_USER }}/deploy-frontend.tar.gz -C frontend
+            rm /home/${{ secrets.SSH_USER }}/deploy-frontend.tar.gz
+            
+            cd frontend
+            
+            # Install prod deps
+            # Check pnpm availability
+            if ! command -v pnpm &> /dev/null; then
+                npm install -g pnpm
+            fi
+            pnpm install --prod --frozen-lockfile
+            
+            # Restart with PM2
+            if command -v pm2 &> /dev/null; then
+              pm2 delete mis-frontend 2>/dev/null || true
+              pm2 start npx --name "mis-frontend" -- next start -p 7000
+              pm2 save
+            else
+              # Fallback
+              pkill -f "next start -p 7000" || true
+              nohup npx next start -p 7000 > app.log 2>&1 &
+            fi
+          EOF
