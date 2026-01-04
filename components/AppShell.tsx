@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 import { authService } from "@/lib/auth";
+import { NotificationBell } from "./NotificationBell";
 
 type NavItem = {
   label: string;
@@ -82,16 +83,14 @@ export function AppShell({
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className={`mx-3 flex items-center rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors duration-150 ${
-                      active
-                        ? "bg-brand-green-50 text-brand-green-700 border border-brand-green-200 shadow-inner shadow-brand-green-100"
-                        : "text-[var(--text-secondary)] hover:bg-gray-50"
-                    }`}
+                    className={`mx-3 flex items-center rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors duration-150 ${active
+                      ? "bg-brand-green-50 text-brand-green-700 border border-brand-green-200 shadow-inner shadow-brand-green-100"
+                      : "text-[var(--text-secondary)] hover:bg-gray-50"
+                      }`}
                   >
                     <span
-                      className={`mr-3 inline-block h-2 w-2 rounded-full ${
-                        active ? "bg-brand-green-600" : "bg-gray-300"
-                      }`}
+                      className={`mr-3 inline-block h-2 w-2 rounded-full ${active ? "bg-brand-green-600" : "bg-gray-300"
+                        }`}
                     />
                     {item.label}
                   </Link>
@@ -113,6 +112,7 @@ export function AppShell({
             )}
           </div>
           <div className="flex items-center gap-3 pl-3 border-l border-[var(--border-subtle)] relative" ref={menuRef}>
+            <NotificationBell />
             <button
               onClick={() => setMenuOpen((o) => !o)}
               className="flex items-center gap-3 rounded-full px-2 py-1 hover:bg-gray-100 transition"

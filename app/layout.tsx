@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ToastProvider";
+import { NotificationsProvider } from "@/lib/notifications-context";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -31,7 +32,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={plexSans.className}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <NotificationsProvider>
+            {children}
+          </NotificationsProvider>
+        </ToastProvider>
       </body>
     </html>
   );
