@@ -51,9 +51,17 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function DashboardCharts({ stats }: DashboardChartsProps) {
     if (!stats) return null;
 
-    // Sort data for better visualization
-    const projectData = [...stats.projectsByStatus].sort((a, b) => b.count - a.count);
-    const roleData = [...stats.usersByRole].sort((a, b) => b.count - a.count);
+    // Sort data for better visualization, with defensive checks for missing properties
+    const projectData = stats.projectsByStatus
+        ? [...stats.projectsByStatus].sort((a, b) => b.count - a.count)
+        : [];
+
+    const roleData = stats.usersByRole
+        ? [...stats.usersByRole].sort((a, b) => b.count - a.count)
+        : [];
+
+    // If no data is available for either chart, don't render the section
+    if (projectData.length === 0 && roleData.length === 0) return null;
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">

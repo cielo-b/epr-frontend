@@ -19,7 +19,18 @@ interface TaskModalProps {
 
 export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskToEdit, projectDevelopers, initialValues }: TaskModalProps) {
     const { addToast } = useToast();
+    const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const userStr = localStorage.getItem("user");
+        if (userStr) setUser(JSON.parse(userStr));
+    }, []);
+
+    const isDeveloper = user?.role === "DEVELOPER";
+    const isManagerOrAdmin = ["BOSS", "SUPERADMIN", "PROJECT_MANAGER", "DEVOPS"].includes(user?.role || "");
+    const canEditAllFields = isManagerOrAdmin || (taskToEdit && taskToEdit.createdBy?.id === user?.id);
+    const isAssignee = taskToEdit?.assignees.some(a => a.id === user?.id);
 
     const [formData, setFormData] = useState({
         title: "",
@@ -154,9 +165,10 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 px-3 py-2 border disabled:bg-gray-50 disabled:text-gray-500"
                                     placeholder="e.g. Implement login API"
                                     required
+                                    disabled={!canEditAllFields}
                                 />
                             </div>
 
@@ -165,8 +177,9 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border h-24"
+                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 px-3 py-2 border h-24 disabled:bg-gray-50 disabled:text-gray-500"
                                     placeholder="Details about the task..."
+                                    disabled={!canEditAllFields}
                                 />
                             </div>
 
@@ -176,7 +189,7 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
-                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border bg-white"
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 px-3 py-2 border bg-white"
                                     >
                                         {Object.values(TaskStatus).map((s) => (
                                             <option key={s} value={s}>{s.replace("_", " ")}</option>
@@ -189,7 +202,8 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                         type="datetime-local"
                                         value={formData.dueDate}
                                         onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2 border"
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 px-3 py-2 border disabled:bg-gray-50 disabled:text-gray-500"
+                                        disabled={!canEditAllFields}
                                     />
                                 </div>
                             </div>
@@ -202,8 +216,9 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                             key={tag}
                                             type="button"
                                             onClick={() => toggleTag(tag)}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${formData.tags.includes(tag)
-                                                ? "bg-blue-50 text-blue-700 border-blue-500 ring-1 ring-blue-500"
+                                            disabled={!canEditAllFields}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all disabled:opacity-50 ${formData.tags.includes(tag)
+                                                ? "bg-brand-green-50 text-brand-green-700 border-brand-green-500 ring-1 ring-brand-green-500"
                                                 : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
                                                 }`}
                                         >
@@ -218,12 +233,13 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Assignees</label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded-md p-2">
                                     {projectDevelopers.length > 0 ? projectDevelopers.map(dev => (
-                                        <label key={dev.id} className="flex items-center gap-2 p-1 hover:bg-gray-50 rounded cursor-pointer">
+                                        <label key={dev.id} className={`flex items-center gap-2 p-1 rounded ${!canEditAllFields ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 cursor-pointer'}`}>
                                             <input
                                                 type="checkbox"
                                                 checked={formData.assigneeIds.includes(dev.id)}
                                                 onChange={() => toggleAssignee(dev.id)}
-                                                className="rounded text-blue-600 focus:ring-blue-500"
+                                                disabled={!canEditAllFields}
+                                                className="rounded text-brand-green-600 focus:ring-brand-green-500 disabled:bg-gray-100"
                                             />
                                             <span className="text-sm text-gray-700">{dev.firstName} {dev.lastName}</span>
                                         </label>
@@ -235,7 +251,7 @@ export default function TaskModal({ isOpen, onClose, onSuccess, projectId, taskT
                         </div>
 
                         <div className="flex justify-between p-6 border-t border-gray-100 bg-gray-50 sticky bottom-0 z-10 rounded-b-xl">
-                            {taskToEdit ? (
+                            {taskToEdit && canEditAllFields ? (
                                 <button
                                     type="button"
                                     onClick={handleDeleteClick}

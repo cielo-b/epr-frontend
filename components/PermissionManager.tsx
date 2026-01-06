@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
 import { Plus, X, Eye, Edit, Trash, Download, Upload, Lock, Calendar, AlertCircle } from "lucide-react";
+import { ConfirmationModal } from "./ConfirmationModal";
+import { useToast } from "./ToastProvider";
 
 interface Permission {
     id: string;
@@ -28,6 +30,12 @@ export default function PermissionManager({ userId, userName }: PermissionManage
     const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [projects, setProjects] = useState<any[]>([]);
+    const { addToast } = useToast();
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        type: "single" | "all";
+        permissionId?: string;
+    }>({ isOpen: false, type: "single" });
 
     useEffect(() => {
         loadPermissions();
@@ -63,29 +71,32 @@ export default function PermissionManager({ userId, userName }: PermissionManage
             await loadPermissions();
             setShowAddForm(false);
         } catch (error: any) {
-            alert(error.response?.data?.message || "Failed to add permission");
+            addToast(error.response?.data?.message || "Failed to add permission", "error");
         }
     };
 
-    const handleDeletePermission = async (permissionId: string) => {
-        if (!confirm("Are you sure you want to remove this permission?")) return;
-
-        try {
-            await api.delete(`/permissions/${permissionId}`);
-            await loadPermissions();
-        } catch (error: any) {
-            alert(error.response?.data?.message || "Failed to delete permission");
-        }
+    const handleDeletePermission = (permissionId: string) => {
+        setConfirmModal({ isOpen: true, type: "single", permissionId });
     };
 
-    const handleDeleteAllPermissions = async () => {
-        if (!confirm(`Are you sure you want to remove ALL permissions for ${userName}?`)) return;
+    const handleDeleteAllPermissions = () => {
+        setConfirmModal({ isOpen: true, type: "all" });
+    };
 
+    const confirmDelete = async () => {
         try {
-            await api.delete(`/permissions/user/${userId}`);
+            if (confirmModal.type === "single" && confirmModal.permissionId) {
+                await api.delete(`/permissions/${confirmModal.permissionId}`);
+                addToast("Permission removed successfully");
+            } else {
+                await api.delete(`/permissions/user/${userId}`);
+                addToast("All permissions removed successfully");
+            }
             await loadPermissions();
         } catch (error: any) {
-            alert(error.response?.data?.message || "Failed to delete permissions");
+            addToast(error.response?.data?.message || "Action failed", "error");
+        } finally {
+            setConfirmModal({ isOpen: false, type: "single" });
         }
     };
 
@@ -121,7 +132,7 @@ export default function PermissionManager({ userId, userName }: PermissionManage
     if (loading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green-600"></div>
             </div>
         );
     }
@@ -137,7 +148,7 @@ export default function PermissionManager({ userId, userName }: PermissionManage
                 <div className="flex gap-2">
                     <button
                         onClick={() => setShowAddForm(true)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm"
+                        className="px-4 py-2 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 flex items-center gap-2 text-sm"
                     >
                         <Plus className="h-4 w-4" />
                         Add Permission
@@ -170,7 +181,7 @@ export default function PermissionManager({ userId, userName }: PermissionManage
                     <p className="text-sm text-gray-500 mt-1">This user has no access to any resources</p>
                     <button
                         onClick={() => setShowAddForm(true)}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                        className="mt-4 px-4 py-2 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 text-sm"
                     >
                         Grant First Permission
                     </button>
@@ -181,14 +192,14 @@ export default function PermissionManager({ userId, userName }: PermissionManage
                         <div
                             key={permission.id}
                             className={`border rounded-lg p-4 ${isExpired(permission.expiresAt)
-                                    ? "bg-red-50 border-red-200"
-                                    : "bg-white border-gray-200"
+                                ? "bg-red-50 border-red-200"
+                                : "bg-white border-gray-200"
                                 }`}
                         >
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3 mb-2">
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-md text-sm font-medium">
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-brand-green-100 text-brand-green-700 rounded-md text-sm font-medium">
                                             {getActionIcon(permission.action)}
                                             {permission.action}
                                         </span>
@@ -253,6 +264,20 @@ export default function PermissionManager({ userId, userName }: PermissionManage
                     ))}
                 </div>
             )}
+
+            <ConfirmationModal
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.type === "all" ? "Remove All Permissions" : "Remove Permission"}
+                message={
+                    confirmModal.type === "all"
+                        ? `Are you sure you want to remove ALL permissions for ${userName}? This cannot be undone.`
+                        : "Are you sure you want to remove this specific permission?"
+                }
+                onConfirm={confirmDelete}
+                onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                confirmText="Remove"
+                type="danger"
+            />
         </div>
     );
 }
@@ -291,7 +316,7 @@ function AddPermissionForm({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <form onSubmit={handleSubmit} className="bg-brand-green-50 border border-brand-green-200 rounded-lg p-4">
             <h4 className="font-medium text-gray-900 mb-3">Add New Permission</h4>
             <div className="grid grid-cols-3 gap-3 mb-3">
                 <div>
@@ -357,7 +382,7 @@ function AddPermissionForm({
             <div className="flex gap-3">
                 <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                    className="px-4 py-2 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 text-sm"
                 >
                     Add Permission
                 </button>

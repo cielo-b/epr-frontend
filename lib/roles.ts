@@ -10,7 +10,7 @@ export enum UserRole {
 }
 
 export const canCreateUsers = (role: string): boolean => {
-  return role === UserRole.BOSS || role === UserRole.SUPERADMIN;
+  return role === UserRole.BOSS || role === UserRole.SUPERADMIN || role === UserRole.PROJECT_MANAGER;
 };
 
 export const canCreateProjects = (role: string): boolean => {
@@ -26,7 +26,7 @@ export const canAssignDevelopers = (role: string): boolean => {
 };
 
 export const canOverseeAllProjects = (role: string): boolean => {
-  return [UserRole.BOSS, UserRole.DEVOPS, UserRole.SUPERADMIN].includes(
+  return [UserRole.BOSS, UserRole.DEVOPS, UserRole.SUPERADMIN, UserRole.PROJECT_MANAGER].includes(
     role as UserRole
   );
 };

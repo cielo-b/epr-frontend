@@ -207,6 +207,7 @@ export default function UsersPage() {
       title="User Management"
       subtitle="Manage access and roles"
       userName={`${user.firstName} ${user.lastName}`}
+      userRole={user.role}
     >
       <>
         <div className="flex justify-end mb-4">
@@ -343,8 +344,8 @@ export default function UsersPage() {
                     <button
                       onClick={() => setActiveTab("details")}
                       className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "details"
-                          ? "border-blue-500 text-blue-600"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        ? "border-brand-green-500 text-brand-green-700"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                         }`}
                     >
                       User Details
@@ -352,8 +353,8 @@ export default function UsersPage() {
                     <button
                       onClick={() => setActiveTab("permissions")}
                       className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "permissions"
-                          ? "border-blue-500 text-blue-600"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        ? "border-brand-green-500 text-brand-green-700"
+                        : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                         }`}
                     >
                       Permissions

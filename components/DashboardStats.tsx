@@ -32,37 +32,69 @@ export function DashboardStats({ stats, projects = [] }: DashboardStatsProps) {
 
     const newProjectsCount = projects ? projects.filter(p => new Date(p.createdAt) >= thirtyDaysAgo).length : 0;
 
-    const cards = [
+    interface StatCard {
+        label: string;
+        value: any;
+        icon: any;
+        color: string;
+        bg: string;
+        trend?: string;
+        trendUp?: boolean;
+    }
+
+    const cards: StatCard[] = stats.overview.totalUsers !== undefined ? [
         {
             label: "Total Users",
-            value: overview.totalUsers,
+            value: stats.overview.totalUsers,
             icon: Users,
-            color: "text-blue-600 dark:text-blue-400",
-            bg: "bg-blue-50 dark:bg-blue-900/20",
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
         },
         {
             label: "Active Projects",
-            value: overview.totalProjects,
+            value: stats.overview.totalProjects,
             icon: Briefcase,
-            color: "text-purple-600 dark:text-purple-400",
-            bg: "bg-purple-50 dark:bg-purple-900/20",
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
             trend: `${newProjectsCount} new this month`,
             trendUp: newProjectsCount > 0
         },
         {
             label: "Documents",
-            value: overview.totalDocuments,
+            value: stats.overview.totalDocuments,
             icon: FileText,
-            color: "text-amber-600 dark:text-amber-400",
-            bg: "bg-amber-50 dark:bg-amber-900/20",
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
         },
         {
             label: "Reports Generated",
-            value: overview.totalReports,
+            value: stats.overview.totalReports,
             icon: FileBarChart,
-            color: "text-emerald-600 dark:text-emerald-400",
-            bg: "bg-emerald-50 dark:bg-emerald-900/20",
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
         },
+    ] : [
+        {
+            label: "Assigned Projects",
+            value: (stats.overview as any).assignedProjects,
+            icon: Briefcase,
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
+        },
+        {
+            label: "My Open Tasks",
+            value: (stats.overview as any).assignedTasks,
+            icon: Activity,
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
+        },
+        {
+            label: "Team Updates",
+            value: projects.length, // Rough proxy for activity
+            icon: TrendingUp,
+            color: "text-brand-green-700",
+            bg: "bg-brand-green-50",
+        }
     ];
 
     return (

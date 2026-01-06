@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { Plus, X, Calendar, Lock, Eye, Edit, Trash, Download, Upload, UserPlus } from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
 
 interface Permission {
     resource: string;
@@ -69,6 +70,7 @@ const TASK_FIELDS = ["title", "description", "status", "priority", "dueDate", "a
 
 export default function CreateVisitorPage() {
     const router = useRouter();
+    const { addToast } = useToast();
     const [loading, setLoading] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<string>("Custom");
     const [showAdvanced, setShowAdvanced] = useState(false);
@@ -118,29 +120,20 @@ export default function CreateVisitorPage() {
         setLoading(true);
 
         try {
-            // Create user
-            const userResponse = await api.post("/users", {
+            // Create user with permissions
+            await api.post("/users", {
                 email,
                 firstName,
                 lastName,
                 password,
                 role: "VISITOR",
+                permissions,
             });
 
-            const userId = userResponse.data.id;
-
-            // Create permissions
-            if (permissions.length > 0) {
-                await api.post("/permissions/bulk", {
-                    userId,
-                    permissions,
-                });
-            }
-
-            alert("Visitor user created successfully!");
+            addToast("Visitor user created successfully!");
             router.push("/users");
         } catch (error: any) {
-            alert(error.response?.data?.message || "Failed to create visitor");
+            addToast(error.response?.data?.message || "Failed to create visitor", "error");
         } finally {
             setLoading(false);
         }
@@ -159,7 +152,7 @@ export default function CreateVisitorPage() {
                 {/* User Details */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <UserPlus className="h-5 w-5 text-blue-600" />
+                        <UserPlus className="h-5 w-5 text-brand-green-600" />
                         User Information
                     </h2>
                     <div className="grid grid-cols-2 gap-4">
@@ -172,7 +165,7 @@ export default function CreateVisitorPage() {
                                 value={firstName}
                                 onChange={(e) => setFirstName(e.target.value)}
                                 required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-green-500 focus:border-transparent"
                             />
                         </div>
                         <div>
@@ -184,7 +177,7 @@ export default function CreateVisitorPage() {
                                 value={lastName}
                                 onChange={(e) => setLastName(e.target.value)}
                                 required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-green-500 focus:border-transparent"
                             />
                         </div>
                         <div>
@@ -196,7 +189,7 @@ export default function CreateVisitorPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-green-500 focus:border-transparent"
                             />
                         </div>
                         <div>
@@ -209,7 +202,7 @@ export default function CreateVisitorPage() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                                 minLength={6}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-green-500 focus:border-transparent"
                             />
                         </div>
                     </div>
@@ -218,7 +211,7 @@ export default function CreateVisitorPage() {
                 {/* Permission Templates */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Lock className="h-5 w-5 text-blue-600" />
+                        <Lock className="h-5 w-5 text-brand-green-600" />
                         Permission Template
                     </h2>
                     <div className="grid grid-cols-2 gap-3">
@@ -228,8 +221,8 @@ export default function CreateVisitorPage() {
                                 type="button"
                                 onClick={() => handleTemplateSelect(template.name)}
                                 className={`p-4 rounded-lg border-2 text-left transition-all ${selectedTemplate === template.name
-                                        ? "border-blue-500 bg-blue-50"
-                                        : "border-gray-200 hover:border-gray-300"
+                                    ? "border-brand-green-500 bg-brand-green-50"
+                                    : "border-gray-200 hover:border-gray-300"
                                     }`}
                             >
                                 <div className="font-medium text-gray-900">{template.name}</div>
@@ -243,13 +236,13 @@ export default function CreateVisitorPage() {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-semibold flex items-center gap-2">
-                            <Lock className="h-5 w-5 text-blue-600" />
+                            <Lock className="h-5 w-5 text-brand-green-600" />
                             Permissions ({permissions.length})
                         </h2>
                         <button
                             type="button"
                             onClick={addPermission}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1 text-sm"
+                            className="px-3 py-1.5 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 flex items-center gap-1 text-sm"
                         >
                             <Plus className="h-4 w-4" />
                             Add Permission
@@ -281,7 +274,7 @@ export default function CreateVisitorPage() {
                         <button
                             type="button"
                             onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="mt-4 text-sm text-blue-600 hover:text-blue-700"
+                            className="mt-4 text-sm text-brand-green-600 hover:text-brand-green-700"
                         >
                             {showAdvanced ? "Hide" : "Show"} Advanced Options
                         </button>
@@ -293,7 +286,7 @@ export default function CreateVisitorPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="px-6 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                        className="px-6 py-2.5 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                     >
                         {loading ? "Creating..." : "Create Visitor User"}
                     </button>

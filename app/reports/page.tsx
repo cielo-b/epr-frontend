@@ -16,6 +16,7 @@ type Report = {
   project?: { id: string; name: string } | null;
   createdBy?: { firstName: string; lastName: string } | null;
   createdAt: string;
+  confidentiality: "CONFIDENTIAL" | "PUBLIC";
 };
 
 export default function ReportsPage() {
@@ -38,6 +39,7 @@ export default function ReportsPage() {
     content: "",
     type: "PROJECT_REPORT",
     projectId: "",
+    confidentiality: "PUBLIC",
   });
   const [files, setFiles] = useState<FileList | null>(null);
   const [fileDescription, setFileDescription] = useState("");
@@ -111,6 +113,7 @@ export default function ReportsPage() {
         content: form.content,
         type: form.type,
         projectId: form.projectId || undefined,
+        confidentiality: form.confidentiality,
       };
       const res = await api.post("/reports", payload);
       const created = res.data;
@@ -126,7 +129,7 @@ export default function ReportsPage() {
         addToast("Report created successfully.");
       }
       setModalOpen(false);
-      setForm({ title: "", content: "", type: "PROJECT_REPORT", projectId: "" });
+      setForm({ title: "", content: "", type: "PROJECT_REPORT", projectId: "", confidentiality: "PUBLIC" });
       setFiles(null);
       setFileDescription("");
       await loadReports();
@@ -169,6 +172,7 @@ export default function ReportsPage() {
         title="Reports"
         subtitle="View and manage reports"
         userName={`${user.firstName} ${user.lastName}`}
+        userRole={user.role}
       >
         <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="filter-bar">
@@ -226,7 +230,14 @@ export default function ReportsPage() {
                     <div className="text-xs text-gray-500 line-clamp-1">{report.content}</div>
                   </td>
                   <td>
-                    <span className="badge badge-info">{report.type}</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="badge badge-info w-fit">{report.type}</span>
+                      <span className={`badge w-fit text-[10px] px-1.5 py-0.5 ${report.confidentiality === 'CONFIDENTIAL' ? 'bg-red-100 text-red-800 border-red-200' :
+                        'bg-green-100 text-green-800 border-green-200'
+                        }`}>
+                        {report.confidentiality}
+                      </span>
+                    </div>
                   </td>
                   <td className="text-sm text-gray-700">
                     {report.project ? (
@@ -401,6 +412,18 @@ export default function ReportsPage() {
                         {t.replace("_", " ")}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Confidentiality</label>
+                  <select
+                    name="confidentiality"
+                    value={form.confidentiality}
+                    onChange={handleChange}
+                    className="input"
+                  >
+                    <option value="PUBLIC">Public</option>
+                    <option value="CONFIDENTIAL">Confidential</option>
                   </select>
                 </div>
                 <div>

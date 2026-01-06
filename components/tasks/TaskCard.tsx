@@ -14,7 +14,7 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
             className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer space-y-3 group"
         >
             <div className="flex justify-between items-start gap-2">
-                <h4 className="text-sm font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
+                <h4 className="text-sm font-semibold text-gray-900 line-clamp-2 group-hover:text-brand-green-600 transition-colors">
                     {task.title}
                 </h4>
                 <div className={`px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap ${TASK_STATUS_COLORS[task.status]}`}>
@@ -37,7 +37,7 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
                             {task.assignees.slice(0, 3).map((user) => (
                                 <div
                                     key={user.id}
-                                    className="w-6 h-6 rounded-full bg-blue-100 border border-white flex items-center justify-center text-[10px] font-bold text-blue-700"
+                                    className="w-6 h-6 rounded-full bg-brand-green-100 border border-white flex items-center justify-center text-[10px] font-bold text-brand-green-700"
                                     title={`${user.firstName} ${user.lastName}`}
                                 >
                                     {user.firstName[0]}

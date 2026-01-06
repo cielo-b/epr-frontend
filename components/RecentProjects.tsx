@@ -40,7 +40,7 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
                 </p>
                 <Link
                     href="/projects" // Using /projects as /projects/new might not exist directly without a list
-                    className="text-sm font-medium bg-brand-blue-600 text-white px-4 py-2 rounded-lg hover:bg-brand-blue-700 transition"
+                    className="text-sm font-medium bg-brand-green-600 text-white px-4 py-2 rounded-lg hover:bg-brand-green-700 transition"
                 >
                     Create Project
                 </Link>
@@ -51,25 +51,25 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
     const getStatusStyle = (status: string) => {
         switch (status.toLowerCase()) {
             case "active":
-                return "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 ring-1 ring-emerald-500/20";
+                return "bg-brand-green-50 text-brand-green-700 border-brand-green-200";
             case "completed":
-                return "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-800 ring-1 ring-blue-500/20";
+                return "bg-brand-green-100 text-brand-green-800 border-brand-green-200";
             case "pending":
-                return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200 dark:border-amber-800 ring-1 ring-amber-500/20";
+                return "bg-brand-green-50 text-brand-green-600 border-brand-green-200";
             case "cancelled":
-                return "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400 border-rose-200 dark:border-rose-800 ring-1 ring-rose-500/20";
+                return "bg-gray-50 text-gray-700 border-gray-200";
             default:
-                return "bg-slate-50 text-slate-700 dark:bg-slate-500/10 dark:text-slate-400 border-slate-200 dark:border-slate-800 ring-1 ring-slate-500/20";
+                return "bg-brand-green-50 text-brand-green-700 border-brand-green-100";
         }
     };
 
     const getStatusDot = (status: string) => {
         switch (status.toLowerCase()) {
-            case "active": return "bg-emerald-500";
-            case "completed": return "bg-blue-500";
-            case "pending": return "bg-amber-500";
-            case "cancelled": return "bg-rose-500";
-            default: return "bg-slate-500";
+            case "active": return "bg-brand-green-500";
+            case "completed": return "bg-brand-green-700";
+            case "pending": return "bg-brand-green-400";
+            case "cancelled": return "bg-gray-400";
+            default: return "bg-brand-green-300";
         }
     };
 
@@ -86,7 +86,7 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
                 </div>
                 <Link
                     href="/projects"
-                    className="text-sm font-medium text-brand-blue-600 hover:text-brand-blue-700 dark:text-brand-blue-400 dark:hover:text-brand-blue-300 flex items-center gap-1 transition-colors px-3 py-1.5 rounded-lg hover:bg-brand-blue-50 dark:hover:bg-brand-blue-900/20"
+                    className="text-sm font-medium text-brand-green-700 hover:text-brand-green-800 flex items-center gap-1 transition-colors px-3 py-1.5 rounded-lg hover:bg-brand-green-50"
                 >
                     View All <ArrowRight className="h-4 w-4" />
                 </Link>
@@ -109,7 +109,7 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
                             >
                                 <td className="px-6 py-4">
                                     <div className="flex flex-col">
-                                        <span className="font-semibold text-[var(--text-primary)] group-hover:text-brand-blue-600 transition-colors text-base">
+                                        <span className="font-semibold text-[var(--text-primary)] group-hover:text-brand-green-700 transition-colors text-base">
                                             {project.name}
                                         </span>
                                         {project.description && (
@@ -121,7 +121,7 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-brand-blue-500 to-indigo-500 flex items-center justify-center text-white font-medium text-xs shadow-sm">
+                                        <div className="h-8 w-8 rounded-full bg-brand-green-600 flex items-center justify-center text-white font-medium text-xs shadow-sm">
                                             {project.manager
                                                 ? `${project.manager.firstName[0]}${project.manager.lastName[0]}`
                                                 : "?"}

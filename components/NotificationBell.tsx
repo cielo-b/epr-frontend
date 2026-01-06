@@ -61,7 +61,7 @@ export function NotificationBell() {
             >
                 <Bell className="h-6 w-6" />
                 {unreadCount > 0 && (
-                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform translate-x-1/4 -translate-y-1/4 bg-red-600 rounded-full animate-pulse">
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-brand-green-600 rounded-full animate-pulse">
                         {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                 )}
@@ -74,7 +74,7 @@ export function NotificationBell() {
                         {unreadCount > 0 && (
                             <button
                                 onClick={() => markAllAsRead()}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                                className="text-xs text-brand-green-600 hover:text-brand-green-800 font-medium transition-colors"
                             >
                                 Mark all read
                             </button>
@@ -92,7 +92,7 @@ export function NotificationBell() {
                                 {notifications.map((notification) => (
                                     <li
                                         key={notification.id}
-                                        className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${notification.isRead ? "opacity-60" : "bg-blue-50"
+                                        className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${notification.isRead ? "opacity-60" : "bg-brand-green-50"
                                             }`}
                                         onClick={() => handleNotificationClick(notification)}
                                     >
@@ -123,7 +123,7 @@ export function NotificationBell() {
                                                 </p>
                                             </div>
                                             {!notification.isRead && (
-                                                <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-blue-600"></span>
+                                                <span className="flex-shrink-0 inline-block h-2 w-2 rounded-full bg-brand-green-600"></span>
                                             )}
                                         </div>
                                     </li>

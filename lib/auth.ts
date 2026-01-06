@@ -6,6 +6,12 @@ export interface User {
   firstName: string;
   lastName: string;
   role: string;
+  permissions?: {
+    resource: string;
+    action: string;
+    resourceId?: string | null;
+    constraints?: Record<string, any> | null;
+  }[];
 }
 
 export interface LoginResponse {

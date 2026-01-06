@@ -35,18 +35,18 @@ export type Task = {
 
 export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
     [TaskStatus.BACKLOG]: "bg-gray-50 text-gray-600 border-gray-200",
-    [TaskStatus.OPEN]: "bg-blue-50 text-blue-700 border-blue-200",
-    [TaskStatus.IN_PROGRESS]: "bg-amber-50 text-amber-700 border-amber-200",
-    [TaskStatus.ON_HOLD]: "bg-red-50 text-red-700 border-red-200",
-    [TaskStatus.COMPLETED]: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    [TaskStatus.OPEN]: "bg-brand-green-50 text-brand-green-700 border-brand-green-200",
+    [TaskStatus.IN_PROGRESS]: "bg-brand-green-100 text-brand-green-800 border-brand-green-300",
+    [TaskStatus.ON_HOLD]: "bg-gray-100 text-gray-700 border-gray-300",
+    [TaskStatus.COMPLETED]: "bg-brand-green-600 text-white border-brand-green-700",
 };
 
 export const TASK_TAG_COLORS: Record<TaskTag, string> = {
-    [TaskTag.BACKEND]: "bg-purple-100 text-purple-700",
-    [TaskTag.FRONTEND]: "bg-pink-100 text-pink-700",
-    [TaskTag.DESIGN]: "bg-indigo-100 text-indigo-700",
-    [TaskTag.DEVOPS]: "bg-orange-100 text-orange-700",
-    [TaskTag.QA]: "bg-teal-100 text-teal-700",
-    [TaskTag.MANAGEMENT]: "bg-blue-100 text-blue-700",
-    [TaskTag.OTHER]: "bg-gray-100 text-gray-700",
+    [TaskTag.BACKEND]: "bg-brand-green-900 text-white",
+    [TaskTag.FRONTEND]: "bg-brand-green-700 text-white",
+    [TaskTag.DESIGN]: "bg-brand-green-600 text-white",
+    [TaskTag.DEVOPS]: "bg-brand-green-800 text-white",
+    [TaskTag.QA]: "bg-brand-green-500 text-white",
+    [TaskTag.MANAGEMENT]: "bg-brand-green-400 text-white",
+    [TaskTag.OTHER]: "bg-gray-200 text-gray-800",
 };

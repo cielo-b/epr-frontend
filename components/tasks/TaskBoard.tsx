@@ -14,11 +14,20 @@ interface TaskBoardProps {
     projectId: string;
     projectDevelopers: any[];
     canCreate: boolean;
+    canUpdate?: boolean;
     initialData?: { title?: string; description?: string } | null;
 }
 
-export default function TaskBoard({ projectId, projectDevelopers, canCreate, initialData }: TaskBoardProps) {
+export default function TaskBoard({ projectId, projectDevelopers, canCreate, canUpdate = true, initialData }: TaskBoardProps) {
     const [tasks, setTasks] = useState<Task[]>([]);
+    // ... (lines 22-60)
+    const handleEdit = (task: Task) => {
+        if (!canUpdate) return; // Or open in read-only mode if supported
+        setEditingTask(task);
+        setIsModalOpen(true);
+    };
+    // ... (lines 66-174)
+
     const [loading, setLoading] = useState(true);
     const { addToast } = useToast();
 
@@ -59,10 +68,7 @@ export default function TaskBoard({ projectId, projectDevelopers, canCreate, ini
         setIsModalOpen(true);
     };
 
-    const handleEdit = (task: Task) => {
-        setEditingTask(task);
-        setIsModalOpen(true);
-    };
+
 
     const onDragEnd = async (result: DropResult) => {
         const { destination, source, draggableId } = result;

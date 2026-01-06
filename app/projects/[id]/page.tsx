@@ -8,7 +8,7 @@ import { authService, User } from "@/lib/auth";
 import { UserRole, canAssignDevelopers, canCreateProjects } from "@/lib/roles";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
-import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive } from "lucide-react";
+import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check } from "lucide-react";
 import TaskBoard from "@/components/tasks/TaskBoard";
 
 type Project = {
@@ -41,7 +41,11 @@ type ProjectDocument = {
   isFolder?: boolean;
   parentId?: string;
   version?: number;
+  confidentiality?: "CONFIDENTIAL" | "PUBLIC";
 };
+
+
+
 
 type ActivityLog = {
   id: string;
@@ -68,6 +72,9 @@ export default function ProjectDetailsPage() {
   const [developers, setDevelopers] = useState<any[]>([]);
   const [assigning, setAssigning] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [isEditingVault, setIsEditingVault] = useState(false);
+  const [vaultContent, setVaultContent] = useState("");
+  const [savingVault, setSavingVault] = useState(false);
   const [assignForm, setAssignForm] = useState({
     developerId: "",
     notes: "",
@@ -94,6 +101,7 @@ export default function ProjectDetailsPage() {
   const [uploading, setUploading] = useState(false);
   const [docFiles, setDocFiles] = useState<FileList | null>(null);
   const [docDescription, setDocDescription] = useState("");
+  const [docConfidentiality, setDocConfidentiality] = useState<"CONFIDENTIAL" | "PUBLIC">("PUBLIC");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     type: "archive" | "unarchive" | "hardDelete" | "removeDeveloper" | null;
@@ -286,6 +294,7 @@ export default function ProjectDetailsPage() {
         formData.append("files", docFiles[i]);
       }
       formData.append("description", docDescription);
+      formData.append("confidentiality", docConfidentiality);
       if (currentFolderId) {
         formData.append("parentId", currentFolderId);
       }
@@ -296,6 +305,7 @@ export default function ProjectDetailsPage() {
       addToast("Files uploaded.");
       setDocFiles(null);
       setDocDescription("");
+      setDocConfidentiality("PUBLIC");
       await loadDocuments();
       loadLogs();
     } catch (error: any) {
@@ -453,6 +463,85 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  const handleEditVault = () => {
+    setVaultContent((project as any).envTemplate || "");
+    setIsEditingVault(true);
+  };
+
+  const saveVault = async () => {
+    setSavingVault(true);
+    try {
+      await api.patch(`/projects/${params.id}`, { envTemplate: vaultContent });
+      addToast("Vault shared successfully!");
+      setIsEditingVault(false);
+      await loadProject();
+      loadLogs();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Failed to share vault content";
+      addToast(Array.isArray(message) ? message.join(", ") : message, "error");
+    } finally {
+      setSavingVault(false);
+    }
+  };
+
+  // Permissions helpers - moved up
+  const isVisitor = user?.role === "VISITOR";
+
+  const projectPermission = useMemo(() => {
+    if (!user?.permissions) return null;
+    return user.permissions.find(
+      (p) =>
+        p.resource === "PROJECT" &&
+        p.action === "VIEW" &&
+        (!p.resourceId || p.resourceId === project?.id)
+    );
+  }, [user, project]);
+
+  const visibleTabs = useMemo(() => {
+    const allTabs = ["details", "tasks", "timeline", "comments", "documents"] as const;
+    if (!isVisitor) return allTabs;
+
+    if (projectPermission?.constraints?.tabs) {
+      return allTabs.filter(tab => projectPermission.constraints?.tabs?.includes(tab));
+    }
+
+    return allTabs;
+  }, [isVisitor, projectPermission]);
+
+  const hasActionPermission = (resource: string, action: string): boolean => {
+    if (!isVisitor) return true;
+    return !!user?.permissions?.some(
+      (p) =>
+        p.resource === resource &&
+        p.action === action &&
+        (!p.resourceId || p.resourceId === project?.id)
+    );
+  };
+
+  const isReadOnly = isVisitor && (projectPermission?.constraints?.readonly || false);
+
+  const canEdit =
+    user && // Check user exists
+    !isReadOnly &&
+    (!isVisitor && ((canCreateProjects(user.role) ||
+      [UserRole.DEVOPS].includes(user.role as UserRole)) &&
+      user.role !== UserRole.DEVELOPER));
+
+  const canAssign = user && !isReadOnly && (!isVisitor && canAssignDevelopers(user.role));
+  const isAssigned = project?.assignments?.some((a) => a.developerId === user?.id);
+  const canManageDocs =
+    user &&
+    !isReadOnly &&
+    (canEdit ||
+      canAssign ||
+      [UserRole.BOSS, UserRole.DEVOPS, UserRole.SUPERADMIN].includes(user.role as UserRole) ||
+      isAssigned ||
+      (isVisitor && (hasActionPermission("DOCUMENT", "CREATE") || hasActionPermission("DOCUMENT", "UPLOAD"))));
+
+  const canCreateTask = !isReadOnly && (!isVisitor || hasActionPermission("TASK", "CREATE"));
+  const canUpdateTask = !isReadOnly && (!isVisitor || hasActionPermission("TASK", "UPDATE"));
+  const canComment = !isReadOnly && (!isVisitor || hasActionPermission("COMMENT", "CREATE"));
+
   if (loading || !user || !project) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -460,18 +549,6 @@ export default function ProjectDetailsPage() {
       </div>
     );
   }
-
-  const canEdit =
-    canCreateProjects(user.role) ||
-    [UserRole.DEVOPS].includes(user.role as UserRole) ||
-    (project.assignments?.some((a) => a.developerId === user.id) ?? false);
-  const canAssign = canAssignDevelopers(user.role);
-  const isAssigned = project.assignments?.some((a) => a.developerId === user.id);
-  const canManageDocs =
-    canEdit ||
-    canAssign ||
-    [UserRole.BOSS, UserRole.DEVOPS, UserRole.SUPERADMIN].includes(user.role as UserRole) ||
-    isAssigned;
 
   return (
     <AppShell title="Project Details" subtitle={project.name} userName={`${user.firstName} ${user.lastName}`}>
@@ -507,51 +584,61 @@ export default function ProjectDetailsPage() {
         {/* Tab Navigation */}
         <div className="border-b border-gray-200 dark:border-gray-700">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-            <button
-              onClick={() => setActiveTab("details")}
-              className={`${activeTab === "details"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-            >
-              Details
-            </button>
-            <button
-              onClick={() => setActiveTab("tasks")}
-              className={`${activeTab === "tasks"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
-            >
-              Tasks
-            </button>
-            <button
-              onClick={() => setActiveTab("timeline")}
-              className={`${activeTab === "timeline"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
-            >
-              Timeline
-            </button>
-            <button
-              onClick={() => setActiveTab("comments")}
-              className={`${activeTab === "comments"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
-            >
-              Comments
-            </button>
-            <button
-              onClick={() => setActiveTab("documents")}
-              className={`${activeTab === "documents"
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
-            >
-              Documents
-            </button>
+            {visibleTabs.includes("details") && (
+              <button
+                onClick={() => setActiveTab("details")}
+                className={`${activeTab === "details"
+                  ? "border-brand-green-500 text-brand-green-700"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+              >
+                Details
+              </button>
+            )}
+            {visibleTabs.includes("tasks") && (
+              <button
+                onClick={() => setActiveTab("tasks")}
+                className={`${activeTab === "tasks"
+                  ? "border-brand-green-500 text-brand-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                Tasks
+              </button>
+            )}
+            {visibleTabs.includes("timeline") && (
+              <button
+                onClick={() => setActiveTab("timeline")}
+                className={`${activeTab === "timeline"
+                  ? "border-brand-green-500 text-brand-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                Timeline
+              </button>
+            )}
+            {visibleTabs.includes("comments") && (
+              <button
+                onClick={() => setActiveTab("comments")}
+                className={`${activeTab === "comments"
+                  ? "border-brand-green-500 text-brand-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                Comments
+              </button>
+            )}
+            {visibleTabs.includes("documents") && (
+              <button
+                onClick={() => setActiveTab("documents")}
+                className={`${activeTab === "documents"
+                  ? "border-brand-green-500 text-brand-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                Documents
+              </button>
+            )}
           </nav>
         </div>
 
@@ -560,7 +647,8 @@ export default function ProjectDetailsPage() {
             <TaskBoard
               projectId={project.id}
               projectDevelopers={project.assignments?.map(a => a.developer) || []}
-              canCreate={canEdit}
+              canCreate={canCreateTask}
+              canUpdate={canUpdateTask}
             />
           )}
 
@@ -590,7 +678,7 @@ export default function ProjectDetailsPage() {
                   {project.githubUrl && (
                     <div className="col-span-1 sm:col-span-2">
                       <div className="font-semibold text-gray-800">GitHub Repository</div>
-                      <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                      <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="text-brand-green-700 hover:underline break-all">
                         {project.githubUrl}
                       </a>
                     </div>
@@ -598,11 +686,78 @@ export default function ProjectDetailsPage() {
                   {project.deployUrl && (
                     <div className="col-span-1 sm:col-span-2">
                       <div className="font-semibold text-gray-800">Live Deployment</div>
-                      <a href={project.deployUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                      <a href={project.deployUrl} target="_blank" rel="noopener noreferrer" className="text-brand-green-700 hover:underline break-all">
                         {project.deployUrl}
                       </a>
                     </div>
                   )}
+
+                  {/* Environment Secret Vault */}
+                  <div className="col-span-1 sm:col-span-2 pt-4 mt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-brand-green-100 rounded-lg">
+                          <Box className="h-4 w-4 text-brand-green-700" />
+                        </div>
+                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Environment Secret Vault</h3>
+                      </div>
+                      {(isAssigned || canEdit) && !isEditingVault && (
+                        <button
+                          onClick={handleEditVault}
+                          className="text-[10px] font-bold text-brand-green-600 hover:text-brand-green-700 uppercase tracking-tight flex items-center gap-1.5"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Share / Update
+                        </button>
+                      )}
+                    </div>
+                    {isEditingVault ? (
+                      <div className="space-y-3">
+                        <textarea
+                          value={vaultContent}
+                          onChange={(e) => setVaultContent(e.target.value)}
+                          placeholder="Paste .env.example content here..."
+                          className="w-full h-40 bg-gray-900 text-brand-green-400 font-mono text-xs p-4 rounded-xl border border-brand-green-500/30 focus:ring-1 focus:ring-brand-green-500 outline-none"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setIsEditingVault(false)}
+                            className="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-700 uppercase"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={saveVault}
+                            disabled={savingVault}
+                            className="px-4 py-1.5 bg-brand-green-600 text-white text-[10px] font-bold rounded-lg hover:bg-brand-green-700 disabled:opacity-50 uppercase shadow-lg shadow-brand-green-600/20"
+                          >
+                            {savingVault ? "Saving..." : "Share Now"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-900 rounded-xl p-4 relative group">
+                        <pre className="text-xs text-brand-green-400 font-mono overflow-x-auto whitespace-pre-wrap">
+                          {(project as any).envTemplate || "# No environment templates shared yet.\n# Use the 'Share' button to add .env.example content."}
+                        </pre>
+                        {(project as any).envTemplate && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText((project as any).envTemplate);
+                              addToast("Vault content copied to clipboard!");
+                            }}
+                            className="absolute top-3 right-3 p-2 bg-gray-800 text-gray-400 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:text-white hover:bg-gray-700"
+                            title="Copy to clipboard"
+                          >
+                            <Check className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <p className="mt-2 text-[10px] text-gray-500 italic">
+                      This vault contains non-sensitive environment templates (e.g. .env.example). Never paste actual production secrets here.
+                    </p>
+                  </div>
                   {project.serverDetails && (
                     <div className="col-span-1 sm:col-span-2">
                       <div className="font-semibold text-gray-800">Server Details</div>
@@ -614,86 +769,177 @@ export default function ProjectDetailsPage() {
                 </div>
               </div>
 
-              {/* Assigned Developers - Now inside Details */}
+              {/* Assigned Developers */}
               <div className="bg-white shadow rounded-lg p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">Assigned Developers</h2>
                 </div>
-                {
-                  project.assignments && project.assignments.length > 0 ? (
-                    <ul className="divide-y divide-gray-200">
-                      {project.assignments.map((a) => (
-                        <li key={a.id} className="py-3 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {a.developer?.firstName} {a.developer?.lastName}
-                            </p>
-                            <p className="text-xs text-gray-600">{a.developer?.email}</p>
-                          </div>
-                          {canAssign && (
-                            <button
-                              onClick={() =>
-                                setConfirmModal({
-                                  type: "removeDeveloper",
-                                  targetId: a.developerId,
-                                  label: `${a.developer?.firstName || ""} ${a.developer?.lastName || ""}`.trim(),
-                                })
-                              }
-                              disabled={removing === a.developerId}
-                              className="px-3 py-1 text-xs rounded-md bg-brand-red-100 text-brand-red-800 hover:bg-brand-red-200 disabled:opacity-60"
-                            >
-                              {removing === a.developerId ? "Removing..." : "Remove"}
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-gray-600">No developers assigned.</p>
-                  )
-                }
-
-                {
-                  canAssign && (
-                    <form onSubmit={assignDeveloper} className="mt-6 space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {project.assignments && project.assignments.length > 0 ? (
+                  <ul className="divide-y divide-gray-200">
+                    {project.assignments.map((a) => (
+                      <li key={a.id} className="py-3 flex items-center justify-between">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Select Developer</label>
-                          <select
-                            name="developerId"
-                            value={assignForm.developerId}
-                            onChange={handleAssignChange}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                            required
+                          <p className="text-sm font-medium text-gray-900">
+                            {a.developer?.firstName} {a.developer?.lastName}
+                          </p>
+                          <p className="text-xs text-gray-600">{a.developer?.email}</p>
+                        </div>
+                        {canAssign && (
+                          <button
+                            onClick={() =>
+                              setConfirmModal({
+                                type: "removeDeveloper",
+                                targetId: a.developerId,
+                                label: `${a.developer?.firstName || ""} ${a.developer?.lastName || ""}`.trim(),
+                              })
+                            }
+                            disabled={removing === a.developerId}
+                            className="px-3 py-1 text-xs rounded-md bg-brand-red-100 text-brand-red-800 hover:bg-brand-red-200 disabled:opacity-60"
                           >
-                            <option value="">-- Choose developer --</option>
-                            {developers.map((dev) => (
-                              <option key={dev.id} value={dev.id}>
-                                {dev.firstName} {dev.lastName} ({dev.email})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Notes (optional)</label>
-                          <input
-                            name="notes"
-                            value={assignForm.notes}
-                            onChange={handleAssignChange}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                            placeholder="e.g., scope or responsibilities"
-                          />
+                            {removing === a.developerId ? "Removing..." : "Remove"}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-600">No developers assigned.</p>
+                )}
+
+                {canAssign && (
+                  <form onSubmit={assignDeveloper} className="mt-6 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Select Developer</label>
+                        <select
+                          name="developerId"
+                          value={assignForm.developerId}
+                          onChange={handleAssignChange}
+                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
+                          required
+                        >
+                          <option value="">-- Choose developer --</option>
+                          {developers.map((dev) => (
+                            <option key={dev.id} value={dev.id}>
+                              {dev.firstName} {dev.lastName} ({dev.email})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Notes (optional)</label>
+                        <input
+                          name="notes"
+                          value={assignForm.notes}
+                          onChange={handleAssignChange}
+                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
+                          placeholder="e.g., scope or responsibilities"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit" disabled={assigning} className="btn btn-primary">
+                        {assigning ? "Assigning..." : "Assign Developer"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+
+
+          {activeTab === "timeline" && (
+            <div className="bg-white shadow rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-6">Activity Timeline</h2>
+              <div className="flow-root">
+                <ul role="list" className="-mb-8">
+                  {logs.map((log, logIdx) => (
+                    <li key={log.id}>
+                      <div className="relative pb-8">
+                        {logIdx !== logs.length - 1 ? (
+                          <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />
+                        ) : null}
+                        <div className="relative flex space-x-3">
+                          <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center ring-8 ring-white">
+                            <span className="text-xs font-bold text-brand-green-700">
+                              {log.actor?.firstName?.[0]}{log.actor?.lastName?.[0]}
+                            </span>
+                          </div>
+                          <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
+                            <div>
+                              <p className="text-sm text-gray-500">
+                                <span className="font-medium text-gray-900">
+                                  {log.actor?.firstName} {log.actor?.lastName}
+                                </span>{' '}
+                                {log.description}
+                              </p>
+                            </div>
+                            <div className="whitespace-nowrap text-right text-sm text-gray-500">
+                              <time dateTime={log.timestamp}>{new Date(log.timestamp).toLocaleString()}</time>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex justify-end">
-                        <button type="submit" disabled={assigning} className="btn btn-primary">
-                          {assigning ? "Assigning..." : "Assign Developer"}
-                        </button>
+                    </li>
+                  ))}
+                  {logs.length === 0 && (
+                    <li className="text-gray-500 text-sm italic">No activity recorded yet.</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "comments" && (
+            <div className="bg-white shadow rounded-lg p-6 min-h-[500px] flex flex-col">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Comments</h2>
+
+              <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 max-h-[600px] custom-scrollbar">
+                {/* ... comments list ... */}
+                {comments.map((comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center text-brand-green-700 font-bold text-xs">
+                      {comment.author?.firstName?.[0]}{comment.author?.lastName?.[0]}
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3 flex-1">
+                      <div className="flex justify-between items-start">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {comment.author?.firstName} {comment.author?.lastName}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(comment.createdAt).toLocaleString()}
+                        </span>
                       </div>
-                    </form>
-                  )
-                }
-              </div >
+                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {canComment ? (
+                <form onSubmit={postComment} className="mt-auto">
+                  <div className="relative">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Write a comment..."
+                      className="w-full rounded-lg border-gray-300 pr-12 focus:border-brand-green-500 focus:ring-brand-green-500 min-h-[80px]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newComment.trim()}
+                      className="absolute bottom-3 right-3 p-1.5 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 disabled:opacity-50"
+                    >
+                      <Send className="h-4 w-4" />
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="text-center py-4 bg-gray-50 rounded-lg text-gray-500 text-sm italic">
+                  You do not have permission to post comments.
+                </div>
+              )}
             </div>
           )}
 
@@ -704,7 +950,7 @@ export default function ProjectDetailsPage() {
                 <div className="flex items-center flex-wrap gap-2 text-sm text-gray-600">
                   <button
                     onClick={() => setCurrentFolderId(null)}
-                    className={`flex items-center hover:text-blue-600 transition-colors ${!currentFolderId ? 'font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded' : ''}`}
+                    className={`flex items-center hover:text-brand-green-700 transition-colors ${!currentFolderId ? 'font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded' : ''}`}
                   >
                     <Folder className="w-4 h-4 mr-1" />
                     Root
@@ -729,7 +975,7 @@ export default function ProjectDetailsPage() {
                         <ChevronRight className="w-4 h-4 text-gray-400" />
                         <button
                           onClick={() => setCurrentFolderId(folder.id)}
-                          className={`hover:text-blue-600 transition-colors ${idx === path.length - 1 ? 'font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded' : ''}`}
+                          className={`hover:text-brand-green-700 transition-colors ${idx === path.length - 1 ? 'font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded' : ''}`}
                         >
                           {folder.originalName}
                         </button>
@@ -740,7 +986,7 @@ export default function ProjectDetailsPage() {
 
                 <div className="flex items-center gap-3">
                   <label className="text-sm text-gray-700 flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+                    <input type="checkbox" className="rounded text-brand-green-600 focus:ring-brand-green-500" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
                     Show archived
                   </label>
                   {canManageDocs && (
@@ -756,9 +1002,9 @@ export default function ProjectDetailsPage() {
 
               {/* Folder Creation Form */}
               {isCreatingFolder && (
-                <form onSubmit={createFolder} className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <Folder className="w-5 h-5 text-blue-600" />
+                <form onSubmit={createFolder} className="mb-6 p-4 bg-brand-green-50 rounded-lg border border-brand-green-100 flex items-center gap-4 animate-in fade-in slide-in-from-top-2">
+                  <div className="p-2 bg-brand-green-100 rounded-lg">
+                    <Folder className="w-5 h-5 text-brand-green-600" />
                   </div>
                   <div className="flex-1">
                     <input
@@ -767,11 +1013,11 @@ export default function ProjectDetailsPage() {
                       value={newFolderName}
                       onChange={(e) => setNewFolderName(e.target.value)}
                       placeholder="Folder Name"
-                      className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
+                      className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 px-3 py-2"
                     />
                   </div>
                   <div className="flex gap-2">
-                    <button type="submit" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium">Create</button>
+                    <button type="submit" className="text-sm bg-brand-green-600 text-white px-4 py-2 rounded-md hover:bg-brand-green-700 font-medium">Create</button>
                     <button type="button" onClick={() => setIsCreatingFolder(false)} className="text-sm bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-50 font-medium">Cancel</button>
                   </div>
                 </form>
@@ -822,11 +1068,11 @@ export default function ProjectDetailsPage() {
                             >
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center">
-                                  <div className={`flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-lg ${doc.isFolder ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                                  <div className={`flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-lg ${doc.isFolder ? 'bg-brand-green-100 text-brand-green-600' : 'bg-gray-100 text-gray-500'}`}>
                                     <Icon className="h-5 w-5" />
                                   </div>
                                   <div className="ml-4">
-                                    <div className={`text-sm font-medium ${doc.isFolder ? 'text-blue-900' : 'text-gray-900'}`} title={doc.originalName}>
+                                    <div className={`text-sm font-medium ${doc.isFolder ? 'text-brand-green-900' : 'text-gray-900'}`} title={doc.originalName}>
                                       {(() => {
                                         const name = doc.originalName;
                                         if (name.length <= 30) return name;
@@ -842,6 +1088,16 @@ export default function ProjectDetailsPage() {
                                       })()}
                                     </div>
                                     {doc.description && <div className="text-xs text-gray-500 max-w-xs truncate">{doc.description}</div>}
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {doc.isArchived && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Archived</span>}
+                                      {doc.confidentiality && !doc.isFolder && (
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${doc.confidentiality === 'CONFIDENTIAL' ? 'bg-red-100 text-red-800' :
+                                            'bg-green-100 text-green-800'
+                                          }`}>
+                                          {doc.confidentiality}
+                                        </span>
+                                      )}
+                                    </div>
                                     {doc.isArchived && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 mt-1">Archived</span>}
                                   </div>
                                 </div>
@@ -860,7 +1116,7 @@ export default function ProjectDetailsPage() {
                                 <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                                   {!doc.isFolder && (
                                     <>
-                                      <button onClick={() => previewDocument(doc)} className="text-gray-400 hover:text-blue-600 transition-colors" title="Preview">
+                                      <button onClick={() => previewDocument(doc)} className="text-gray-400 hover:text-brand-green-700 transition-colors" title="Preview">
                                         <Eye className="h-4 w-4" />
                                       </button>
                                       <button onClick={() => downloadDocument(doc)} className="text-gray-400 hover:text-green-600 transition-colors" title="Download">
@@ -873,11 +1129,11 @@ export default function ProjectDetailsPage() {
                                     <>
                                       {doc.isArchived ? (
                                         <>
-                                          <button onClick={() => setConfirmModal({ type: "unarchive", targetId: doc.id, label: doc.originalName })} className="text-green-600 hover:text-green-900 text-xs font-semibold">Restore</button>
+                                          <button onClick={() => setConfirmModal({ type: "unarchive", targetId: doc.id, label: doc.originalName })} className="text-brand-green-600 hover:text-brand-green-900 text-xs font-semibold">Restore</button>
                                           <button onClick={() => setConfirmModal({ type: "hardDelete", targetId: doc.id, label: doc.originalName })} className="text-red-400 hover:text-red-600 transition-colors" title="Delete Permanently"><Trash2 className="h-4 w-4" /></button>
                                         </>
                                       ) : (
-                                        <button onClick={() => setConfirmModal({ type: "archive", targetId: doc.id, label: doc.originalName })} className="text-gray-400 hover:text-amber-600 transition-colors" title="Archive">
+                                        <button onClick={() => setConfirmModal({ type: "archive", targetId: doc.id, label: doc.originalName })} className="text-gray-400 hover:text-brand-green-600 transition-colors" title="Archive">
                                           <Archive className="h-4 w-4" />
                                         </button>
                                       )}
@@ -927,14 +1183,25 @@ export default function ProjectDetailsPage() {
                             type="text"
                             value={docDescription}
                             onChange={(e) => setDocDescription(e.target.value)}
-                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
                             placeholder="Add a note about these files..."
                           />
+                        </div>
+                        <div className="w-40">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Confidentiality</label>
+                          <select
+                            value={docConfidentiality}
+                            onChange={(e) => setDocConfidentiality(e.target.value as any)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                          >
+                            <option value="PUBLIC">Public</option>
+                            <option value="CONFIDENTIAL">Confidential</option>
+                          </select>
                         </div>
                         <button
                           onClick={uploadDocuments}
                           disabled={uploading}
-                          className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+                          className="px-6 py-2 bg-brand-green-600 text-white text-sm font-medium rounded-md hover:bg-brand-green-700 disabled:opacity-50 transition-colors shadow-sm"
                         >
                           {uploading ? "Uploading..." : "Start Upload"}
                         </button>
@@ -963,8 +1230,8 @@ export default function ProjectDetailsPage() {
                               ) : null}
                               <div className="relative flex space-x-3">
                                 <div>
-                                  <span className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center ring-8 ring-white">
-                                    <Clock className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                                  <span className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center ring-8 ring-white">
+                                    <Clock className="h-4 w-4 text-brand-green-600" aria-hidden="true" />
                                   </span>
                                 </div>
                                 <div className="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
@@ -987,7 +1254,7 @@ export default function ProjectDetailsPage() {
                             {visibleLogsCount < logs.length && (
                               <button
                                 onClick={() => setVisibleLogsCount((prev) => Math.min(prev + 10, logs.length))}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-brand-green-700 bg-brand-green-100 hover:bg-brand-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green-500 transition-colors"
                               >
                                 Show More
                               </button>
@@ -995,7 +1262,7 @@ export default function ProjectDetailsPage() {
                             {visibleLogsCount > 10 && (
                               <button
                                 onClick={() => setVisibleLogsCount(10)}
-                                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green-500 transition-colors"
                               >
                                 Show Less
                               </button>
@@ -1012,69 +1279,6 @@ export default function ProjectDetailsPage() {
             )
           }
 
-          {
-            activeTab === "comments" && (
-              <div className="bg-white shadow rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-6">Discussion</h2>
-
-                <div className="mb-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <form onSubmit={postComment} className="relative">
-                    <div className="overflow-hidden">
-                      <label htmlFor="comment" className="sr-only">Add your comment</label>
-                      <textarea
-                        rows={4}
-                        name="comment"
-                        id="comment"
-                        className="block w-full py-3 px-4 resize-y border border-gray-300 rounded-lg focus:outline-none focus:ring-0 focus:border-blue-500 sm:text-sm shadow-sm transition-all"
-                        placeholder="Write a comment..."
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                      />
-                      <div className="mt-3 flex justify-end">
-                        <button
-                          type="submit"
-                          disabled={!newComment.trim()}
-                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                        >
-                          <Send className="h-4 w-4 mr-2" />
-                          Post Comment
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-
-                <div className="space-y-6">
-                  {commentsLoading ? (
-                    <p className="text-sm text-gray-500">Loading comments...</p>
-                  ) : comments.length > 0 ? (
-                    comments.map((comment) => (
-                      <div key={comment.id} className="flex space-x-3">
-                        <div className="flex-shrink-0">
-                          <span className="inline-flex items-center justify-center h-10 w-10 mean-w-[2.5rem] rounded-full bg-gray-500">
-                            <span className="text-sm font-medium leading-none text-white">
-                              {comment.author?.firstName?.[0]}{comment.author?.lastName?.[0]}
-                            </span>
-                          </span>
-                        </div>
-                        <div>
-                          <div className="text-sm">
-                            <span className="font-medium text-gray-900">{comment.author?.firstName} {comment.author?.lastName}</span>
-                            <span className="text-gray-500 ml-2">{new Date(comment.createdAt).toLocaleString()}</span>
-                          </div>
-                          <div className="mt-1 text-sm text-gray-700">
-                            <p>{comment.content}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-4">No comments yet. Start the conversation!</p>
-                  )}
-                </div>
-              </div>
-            )
-          }
 
 
         </div>
@@ -1250,7 +1454,7 @@ export default function ProjectDetailsPage() {
                       <ul className="space-y-2 text-sm max-h-40 overflow-y-auto bg-gray-50 p-2 rounded border border-[var(--border-subtle)]">
                         {documents.map((doc) => (
                           <li key={doc.id} className="flex items-center gap-2 text-[var(--text-secondary)]">
-                            <File className="h-4 w-4 text-blue-500 shrink-0" />
+                            <File className="h-4 w-4 text-brand-green-500 shrink-0" />
                             <span className="truncate" title={doc.originalName}>{doc.originalName}</span>
                             <span className="text-xs text-gray-400 ml-auto whitespace-nowrap">{(doc.size / 1024).toFixed(1)} KB</span>
                           </li>
@@ -1294,8 +1498,8 @@ export default function ProjectDetailsPage() {
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-10">
                 <div className="flex items-center gap-4 min-w-0">
-                  <div className="h-10 w-10 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                    <File className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div className="h-10 w-10 rounded-full bg-brand-green-50 dark:bg-brand-green-900/30 flex items-center justify-center flex-shrink-0">
+                    <File className="h-5 w-5 text-brand-green-600 dark:text-brand-green-400" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg line-clamp-1" title={previewDoc?.originalName}>
@@ -1333,7 +1537,7 @@ export default function ProjectDetailsPage() {
               <div className="flex-1 bg-gray-50 dark:bg-slate-950/50 flex items-center justify-center overflow-auto relative p-4">
                 {previewLoading ? (
                   <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-12 h-12 border-4 border-brand-green-600 border-t-transparent rounded-full animate-spin" />
                     <p className="text-gray-500 dark:text-gray-400 font-medium animate-pulse">Loading preview...</p>
                   </div>
                 ) : previewUrl && previewDoc ? (
@@ -1363,7 +1567,7 @@ export default function ProjectDetailsPage() {
                       </p>
                       <button
                         onClick={() => downloadDocument(previewDoc)}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold shadow-lg shadow-blue-600/20 transition-all hover:scale-105"
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-brand-green-600 text-white rounded-xl hover:bg-brand-green-700 font-semibold shadow-lg shadow-brand-green-600/20 transition-all hover:scale-105"
                       >
                         <Download className="h-5 w-5" />
                         Download File
