@@ -17,6 +17,8 @@ interface QuickActionsPanelProps {
     onCreateProject: () => void;
     onSendUpdateRequest: () => void;
     onScheduleMeeting: () => void;
+    onAnnouncement?: () => void; // Optional for Secretaries
+    userRole?: string;
 }
 
 export function QuickActionsPanel({
@@ -24,9 +26,13 @@ export function QuickActionsPanel({
     onCreateProject,
     onSendUpdateRequest,
     onScheduleMeeting,
+    onAnnouncement,
+    userRole
 }: QuickActionsPanelProps) {
-    const quickActions: QuickAction[] = [
-        {
+
+    // Define all possible actions
+    const allActions = {
+        assignDev: {
             id: "assign-dev",
             title: "Assign Developer",
             description: "Quickly assign a developer to a project",
@@ -38,7 +44,7 @@ export function QuickActionsPanel({
                 </svg>
             ),
         },
-        {
+        createProject: {
             id: "create-project",
             title: "Create Project",
             description: "Start a new project quickly",
@@ -50,7 +56,7 @@ export function QuickActionsPanel({
                 </svg>
             ),
         },
-        {
+        updateRequest: {
             id: "update-request",
             title: "Request Update",
             description: "Ask team for project updates",
@@ -62,7 +68,7 @@ export function QuickActionsPanel({
                 </svg>
             ),
         },
-        {
+        meeting: {
             id: "meeting",
             title: "Schedule Meeting",
             description: "Set up a team meeting",
@@ -74,7 +80,40 @@ export function QuickActionsPanel({
                 </svg>
             ),
         },
-    ];
+        announcement: {
+            id: "announcement",
+            title: "New Announcement",
+            description: "Post a company-wide update",
+            color: "border-brand-green-100 hover:bg-brand-green-50 text-brand-green-700",
+            action: onAnnouncement || (() => { }),
+            icon: (
+                <svg className="w-6 h-6 text-brand-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+            ),
+        }
+    };
+
+    let visibleActions: QuickAction[] = [];
+
+    if (userRole === "SECRETARY") {
+        visibleActions = [
+            allActions.meeting,
+            allActions.announcement
+        ];
+    } else if (["PROJECT_MANAGER", "SUPERADMIN", "BOSS"].includes(userRole || "")) {
+        // PM / SuperAdmin / Boss
+        visibleActions = [
+            allActions.assignDev,
+            allActions.createProject,
+            allActions.updateRequest,
+            allActions.meeting,
+            allActions.announcement
+        ];
+    } else {
+        // Developers and others
+        visibleActions = [];
+    }
 
     return (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
@@ -89,7 +128,7 @@ export function QuickActionsPanel({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {quickActions.map((action) => (
+                {visibleActions.map((action) => (
                     <button
                         key={action.id}
                         onClick={action.action}

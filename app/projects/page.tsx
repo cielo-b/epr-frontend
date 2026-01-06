@@ -7,6 +7,7 @@ import { canCreateProjects } from "@/lib/roles";
 import api from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
+import { TableSkeleton, Skeleton } from "@/components/Skeleton";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import Link from "next/link";
 import { Box } from "lucide-react";
@@ -251,10 +252,18 @@ export default function ProjectsPage() {
 
   if (loading || !user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="h-12 w-12 border-4 border-brand-green-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-gray-500 font-medium animate-pulse">Loading projects...</p>
-      </div>
+      <AppShell
+        title="Projects"
+        subtitle="Manage projects and timelines"
+        userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."}
+        userRole={user?.role}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <TableSkeleton rows={10} columns={7} />
+      </AppShell>
     );
   }
 
@@ -269,6 +278,7 @@ export default function ProjectsPage() {
       userRole={user.role}
     >
       <>
+
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div className="flex flex-1 items-center gap-3">
             <div className="relative flex-1 max-w-md">

@@ -6,6 +6,7 @@ import { authService, User } from "@/lib/auth";
 import api from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
+import { TableSkeleton, Skeleton } from "@/components/Skeleton";
 
 export default function ServersPage() {
     const router = useRouter();
@@ -178,7 +179,16 @@ export default function ServersPage() {
         }
     };
 
-    if (loading || !user) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    if (loading || !user) {
+        return (
+            <AppShell title="Servers" subtitle="Manage Infrastructure" userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."} userRole={user?.role}>
+                <div className="flex justify-end mb-4">
+                    <Skeleton className="h-10 w-32" />
+                </div>
+                <TableSkeleton rows={8} columns={6} />
+            </AppShell>
+        );
+    }
 
     return (
         <AppShell title="Servers" subtitle="Manage Infrastructure" userName={`${user.firstName} ${user.lastName}`} userRole={user.role}>

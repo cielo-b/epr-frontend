@@ -31,6 +31,12 @@ export const canOverseeAllProjects = (role: string): boolean => {
   );
 };
 
+export const canManageAnnouncements = (role: string): boolean => {
+  return [UserRole.SECRETARY, UserRole.PROJECT_MANAGER, UserRole.BOSS, UserRole.SUPERADMIN].includes(
+    role as UserRole
+  );
+};
+
 export const getRoleDisplayName = (role: string): string => {
   const roleMap: Record<string, string> = {
     BOSS: "Boss",

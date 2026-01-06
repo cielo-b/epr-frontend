@@ -7,6 +7,7 @@ import { UserRole, canCreateUsers, getRoleDisplayName } from "@/lib/roles";
 import api from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
+import { TableSkeleton, Skeleton } from "@/components/Skeleton";
 import PermissionManager from "@/components/PermissionManager";
 
 export default function UsersPage() {
@@ -116,10 +117,7 @@ export default function UsersPage() {
   };
 
   const saveUser = async () => {
-    if (!selectedUser && !editForm.password) {
-      addToast("Password is required for new users", "error");
-      return;
-    }
+    // Password is now optional. If blank, invitation email is sent.
     setSaving(true);
     try {
       const payload: any = {
@@ -192,9 +190,17 @@ export default function UsersPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
-      </div>
+      <AppShell
+        title="User Management"
+        subtitle="Manage access and roles"
+        userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."}
+        userRole={user?.role}
+      >
+        <div className="flex justify-end mb-4">
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <TableSkeleton rows={10} columns={5} />
+      </AppShell>
     );
   }
 
@@ -410,17 +416,7 @@ export default function UsersPage() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="label">New Password (optional)</label>
-                        <input
-                          type="password"
-                          name="password"
-                          value={editForm.password}
-                          onChange={handleEditChange}
-                          placeholder="Leave blank to keep current password"
-                          className="input"
-                        />
-                      </div>
+
                       <div className="flex items-center space-x-2 mt-6">
                         <input
                           id="isActiveModal"

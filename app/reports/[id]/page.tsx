@@ -14,7 +14,8 @@ type Report = {
   content: string;
   type: string;
   project?: { id: string; name: string } | null;
-  createdBy?: { firstName: string; lastName: string } | null;
+  createdById?: string;
+  createdBy?: { id: string; firstName: string; lastName: string } | null;
   createdAt: string;
 };
 
@@ -247,9 +248,43 @@ export default function ReportDetailsPage() {
 
   if (loading || !user || !report) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
-      </div>
+      <AppShell
+        title="Report Details"
+        subtitle="Loading report..."
+        userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."}
+        userRole={user?.role}
+      >
+        <main className="max-w-5xl mx-auto space-y-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="h-6 w-32 bg-gray-200 animate-pulse rounded"></div>
+            <div className="h-6 w-32 bg-gray-200 animate-pulse rounded"></div>
+          </div>
+          <div className="bg-white shadow rounded-lg p-6 space-y-4">
+            <div className="flex justify-between items-start">
+              <div className="space-y-3 w-3/4">
+                <div className="h-8 w-3/4 bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-4 w-full bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-4 w-full bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-4 w-2/3 bg-gray-200 animate-pulse rounded"></div>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="space-y-2">
+                <div className="h-4 w-24 bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-5 w-48 bg-gray-200 animate-pulse rounded"></div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 w-24 bg-gray-200 animate-pulse rounded"></div>
+                <div className="h-5 w-48 bg-gray-200 animate-pulse rounded"></div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </AppShell>
     );
   }
 
@@ -258,6 +293,7 @@ export default function ReportDetailsPage() {
       title="Report Details"
       subtitle={report.title}
       userName={`${user.firstName} ${user.lastName}`}
+      userRole={user.role}
     >
       <main className="max-w-5xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
@@ -270,31 +306,35 @@ export default function ReportDetailsPage() {
         </div>
 
         <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex justify-between items-start gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{report.title}</h1>
-                <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">
-                  {report.content}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                  {report.type}
-                </span>
-                <button
-                  onClick={() => setEditing(true)}
-                  className="btn btn-primary btn-sm"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setConfirmOpen(true)}
-                  className="btn btn-danger btn-sm"
-                >
-                  Delete
-                </button>
-              </div>
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{report.title}</h1>
+              <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">
+                {report.content}
+              </p>
             </div>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                {report.type}
+              </span>
+              {user && (["PROJECT_MANAGER", "BOSS", "SUPERADMIN"].includes(user.role) || report.createdById === user.id || report.createdBy?.id === user.id) && (
+                <>
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="btn btn-primary btn-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setConfirmOpen(true)}
+                    className="btn btn-danger btn-sm"
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
             <div>
               <div className="font-semibold text-gray-800">Created by</div>
@@ -321,125 +361,125 @@ export default function ReportDetailsPage() {
           </div>
         </div>
         <div className="bg-white shadow rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Attachments</h2>
-              <label className="text-sm text-gray-700 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={showArchived}
-                  onChange={(e) => setShowArchived(e.target.checked)}
-                />
-                Show archived
-              </label>
-            </div>
-            {documents.length > 0 ? (
-              <ul className="divide-y divide-[var(--border-subtle)]">
-                {documents.map((doc) => (
-                  <li key={doc.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{doc.originalName}</p>
-                      <p className="text-xs text-gray-600">
-                        {(doc.size / 1024).toFixed(1)} KB • {doc.mimeType}
-                      </p>
-                      {doc.description && (
-                        <p className="text-xs text-gray-500 mt-1">{doc.description}</p>
-                      )}
-                      {doc.isArchived && (
-                        <p className="text-xs text-yellow-700 mt-1">Archived</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Attachments</h2>
+            <label className="text-sm text-gray-700 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+          </div>
+          {documents.length > 0 ? (
+            <ul className="divide-y divide-[var(--border-subtle)]">
+              {documents.map((doc) => (
+                <li key={doc.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{doc.originalName}</p>
+                    <p className="text-xs text-gray-600">
+                      {(doc.size / 1024).toFixed(1)} KB • {doc.mimeType}
+                    </p>
+                    {doc.description && (
+                      <p className="text-xs text-gray-500 mt-1">{doc.description}</p>
+                    )}
+                    {doc.isArchived && (
+                      <p className="text-xs text-yellow-700 mt-1">Archived</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => downloadDocument(doc)}
+                      className="text-xs text-brand-green-700 hover:underline"
+                    >
+                      {downloadingId === doc.id ? "Downloading..." : "Download"}
+                    </button>
+                    {!doc.isArchived ? (
                       <button
-                        onClick={() => downloadDocument(doc)}
-                        className="text-xs text-brand-green-700 hover:underline"
+                        onClick={() =>
+                          setDocModal({
+                            type: "archive",
+                            targetId: doc.id,
+                            label: doc.originalName,
+                          })
+                        }
+                        className="btn btn-warn btn-sm"
                       >
-                        {downloadingId === doc.id ? "Downloading..." : "Download"}
+                        Archive
                       </button>
-                      {!doc.isArchived ? (
+                    ) : (
+                      <>
                         <button
                           onClick={() =>
                             setDocModal({
-                              type: "archive",
+                              type: "unarchive",
                               targetId: doc.id,
                               label: doc.originalName,
                             })
                           }
-                            className="btn btn-warn btn-sm"
+                          className="btn btn-primary btn-sm"
                         >
-                          Archive
+                          Unarchive
                         </button>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() =>
-                              setDocModal({
-                                type: "unarchive",
-                                targetId: doc.id,
-                                label: doc.originalName,
-                              })
-                            }
-                            className="btn btn-primary btn-sm"
-                          >
-                            Unarchive
-                          </button>
-                          <button
-                            onClick={() =>
-                              setDocModal({
-                                type: "hardDelete",
-                                targetId: doc.id,
-                                label: doc.originalName,
-                              })
-                            }
-                            className="btn btn-danger btn-sm"
-                          >
-                            Delete permanently
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-[var(--text-secondary)]">No attachments.</p>
-            )}
+                        <button
+                          onClick={() =>
+                            setDocModal({
+                              type: "hardDelete",
+                              targetId: doc.id,
+                              label: doc.originalName,
+                            })
+                          }
+                          className="btn btn-danger btn-sm"
+                        >
+                          Delete permanently
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[var(--text-secondary)]">No attachments.</p>
+          )}
 
-            <form onSubmit={uploadDocuments} className="mt-6 space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Upload Files
-                </label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleDocsChange}
-                  className="file-input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Description (optional)
-                </label>
-                <input
-                  type="text"
-                  value={docDescription}
-                  onChange={(e) => setDocDescription(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                  placeholder="Applies to all uploaded files"
-                />
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={uploading}
-                  className="btn btn-primary"
-                >
-                  {uploading ? "Uploading..." : "Upload Files"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </main>
+          <form onSubmit={uploadDocuments} className="mt-6 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Upload Files
+              </label>
+              <input
+                type="file"
+                multiple
+                onChange={handleDocsChange}
+                className="file-input"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Description (optional)
+              </label>
+              <input
+                type="text"
+                value={docDescription}
+                onChange={(e) => setDocDescription(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
+                placeholder="Applies to all uploaded files"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={uploading}
+                className="btn btn-primary"
+              >
+                {uploading ? "Uploading..." : "Upload Files"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
 
       {docModal.type && docModal.targetId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
@@ -477,13 +517,12 @@ export default function ReportDetailsPage() {
                     await hardDeleteDocument(targetId);
                   }
                 }}
-                className={`btn ${
-                  docModal.type === "hardDelete"
-                    ? "btn-danger"
-                    : docModal.type === "unarchive"
+                className={`btn ${docModal.type === "hardDelete"
+                  ? "btn-danger"
+                  : docModal.type === "unarchive"
                     ? "btn-primary"
                     : "btn-warn"
-                }`}
+                  }`}
               >
                 Confirm
               </button>
@@ -560,11 +599,11 @@ export default function ReportDetailsPage() {
                 </div>
               </div>
               <div className="modal-footer pt-2">
-              <button
-                type="button"
-                onClick={() => setEditing(false)}
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
                   className="btn btn-ghost"
-              >
+                >
                   Cancel
                 </button>
                 <button

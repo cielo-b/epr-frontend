@@ -23,6 +23,7 @@ import { RecentProjects } from "@/components/RecentProjects";
 import { QuickActionModals } from "@/components/QuickActionModals";
 import { MyTasks } from "@/components/MyTasks";
 import { PersonalDashboardCharts } from "@/components/PersonalDashboardCharts";
+import { Skeleton } from "@/components/Skeleton"; // Import Skeleton component
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -45,55 +46,81 @@ export default function DashboardPage() {
     isOpen: false
   });
 
+  // Charts Skeleton
+  const ChartsSkeleton = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-sm p-6 h-[400px]">
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex items-center justify-center h-[300px]">
+          <Skeleton className="h-48 w-48 rounded-full" />
+        </div>
+      </div>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-sm p-6 h-[400px]">
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="space-y-4 mt-8">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-4">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-8 flex-1" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   useEffect(() => {
+    // Initial sync check for user
     const currentUser = authService.getUser();
     if (!currentUser) {
       router.push("/login");
       return;
     }
     setUser(currentUser);
+    // Initialize loading data
     loadDashboardData();
   }, [router]);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
       const currentUser = authService.getUser();
       const isDevOpsRole = ["DEVOPS", "BOSS", "SUPERADMIN", "PROJECT_MANAGER"].includes(currentUser?.role || "");
 
-      // Load Stats
+      // Execute promises in parallel and don't block one for another
+      const promises = [];
+
+      // Stats
       if (canOverseeAllProjects(currentUser?.role || "")) {
-        const statsRes = await api.get("/reports/statistics/system");
-        setStats(statsRes.data);
+        promises.push(api.get("/reports/statistics/system").then(res => setStats(res.data)));
       } else {
-        // Fetch personal stats for Developers and others
-        const statsRes = await api.get("/reports/statistics/personal");
-        setStats(statsRes.data);
+        promises.push(api.get("/reports/statistics/personal").then(res => setStats(res.data)));
       }
 
-      // Load Projects (for Recent Projects list)
-      const projectsRes = await api.get("/projects");
-      setRecentProjects(projectsRes.data);
+      // Projects
+      promises.push(api.get("/projects").then(res => {
+        setRecentProjects(res.data);
+        const deployed = res.data.filter((p: any) => p.isDeployed).length;
+        const healthy = res.data.filter((p: any) => p.lastHealthCheckStatus === "UP").length;
+        const down = res.data.filter((p: any) => p.lastHealthCheckStatus === "DOWN").length;
+        setDeploymentStats({ deployed, healthy, down });
+      }));
 
-      // Calculate deployment stats
-      const deployed = projectsRes.data.filter((p: any) => p.isDeployed).length;
-      const healthy = projectsRes.data.filter((p: any) => p.lastHealthCheckStatus === "UP").length;
-      const down = projectsRes.data.filter((p: any) => p.lastHealthCheckStatus === "DOWN").length;
-      setDeploymentStats({ deployed, healthy, down });
-
-      // Load DevOps-specific data
+      // DevOps Data
       if (isDevOpsRole) {
-        const [serversRes, notificationsRes] = await Promise.all([
-          api.get("/servers"),
-          api.get("/notifications"),
-        ]);
-        setServers(serversRes.data);
-        setNotifications(notificationsRes.data.slice(0, 5));
+        promises.push(api.get("/servers").then(res => setServers(res.data)));
+        promises.push(api.get("/notifications").then(res => setNotifications(res.data.slice(0, 5))));
       }
 
-      // Load announcements for everyone
-      try {
-        const announcementsRes = await api.get("/announcements/recent?limit=5");
-        setAnnouncements(announcementsRes.data.map((a: any) => ({
+      // Announcements
+      promises.push(api.get("/announcements/recent?limit=5").then(res => res.data).then(data => {
+        setAnnouncements(data.map((a: any) => ({
           id: a.id,
           projectId: a.projectId,
           projectName: a.project?.name || "Unknown Project",
@@ -102,17 +129,13 @@ export default function DashboardPage() {
           createdAt: a.createdAt,
           priority: a.priority
         })));
-      } catch (err) {
-        console.error("Failed to load announcements:", err);
-      }
+      }));
 
-      // Load Activities for everyone
-      try {
-        const activitiesRes = await api.get("/activity/recent");
-        setActivities(activitiesRes.data);
-      } catch (err) {
-        console.error("Failed to load activities:", err);
-      }
+      // Activities
+      promises.push(api.get("/activity/recent").then(res => setActivities(res.data)));
+
+      // Wait for all to finish (or fail)
+      await Promise.allSettled(promises);
 
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
@@ -181,15 +204,8 @@ export default function DashboardPage() {
     router.push(`/projects/${projectId}`);
   };
 
-  if (loading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-root)]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 border-4 border-brand-green-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-[var(--text-secondary)] font-medium">Loading Dashboard...</p>
-        </div>
-      </div>
-    );
+  if (!user) {
+    return null; // Minimal fallback during initial auth check
   }
 
   const isDevOpsRole = ["DEVOPS", "BOSS", "SUPERADMIN", "PROJECT_MANAGER"].includes(user.role);
@@ -269,13 +285,15 @@ export default function DashboardPage() {
 
         {/* Top Stats Section removed from here since it moved above Highlights */}
 
-        {/* PM Quick Actions - Only for PM and Superadmin */}
-        {isPMRole && (
+        {/* Quick Actions Panel - for PM, Superadmin, and Secretary */}
+        {(isPMRole || user.role === "SECRETARY") && (
           <QuickActionsPanel
             onAssignDeveloper={handleAssignDeveloper}
             onCreateProject={handleCreateProject}
             onSendUpdateRequest={handleSendUpdateRequest}
             onScheduleMeeting={() => setActiveModal("meeting")}
+            onAnnouncement={() => setActiveModal("announcement")} // Add this to QuickActionsPanel
+            userRole={user.role}
           />
         )}
 
@@ -284,111 +302,162 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Deployments Card */}
             <div className="group relative bg-white border border-brand-green-100 rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Deployments</h3>
-                  <div className="p-2.5 bg-brand-green-50 rounded-xl text-brand-green-600 group-hover:scale-110 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
+              {loading ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-8 rounded-xl" /></div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
                   </div>
+                  <Skeleton className="h-10 w-full rounded-xl" />
                 </div>
-                <div className="space-y-3 mb-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Deployed</span>
-                    <span className="text-2xl font-bold text-gray-900">{deploymentStats.deployed}</span>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Deployments</h3>
+                    <div className="p-2.5 bg-brand-green-50 rounded-xl text-brand-green-600 group-hover:scale-110 transition-transform">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Healthy</span>
-                    <span className="text-lg font-bold text-brand-green-600">{deploymentStats.healthy}</span>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Deployed</span>
+                      <span className="text-2xl font-bold text-gray-900">{deploymentStats.deployed}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Healthy</span>
+                      <span className="text-lg font-bold text-brand-green-600">{deploymentStats.healthy}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Down</span>
+                      <span className={`text-lg font-bold ${deploymentStats.down > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                        {deploymentStats.down}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Down</span>
-                    <span className={`text-lg font-bold ${deploymentStats.down > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                      {deploymentStats.down}
-                    </span>
-                  </div>
+                  <Link href="/projects/deployments" className="block w-full text-center py-2.5 px-4 bg-brand-green-600 hover:bg-brand-green-700 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md shadow-brand-green-100">
+                    View Deployments
+                  </Link>
                 </div>
-                <Link href="/projects/deployments" className="block w-full text-center py-2.5 px-4 bg-brand-green-600 hover:bg-brand-green-700 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md shadow-brand-green-100">
-                  View Deployments
-                </Link>
-              </div>
+              )}
             </div>
 
             {/* Servers Card */}
             <div className="group relative bg-white border border-brand-green-100 rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Servers</h3>
-                  <div className="p-2.5 bg-brand-green-50 rounded-xl text-brand-green-600 group-hover:scale-110 transition-transform">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                    </svg>
+              {loading ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-8 rounded-xl" /></div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
                   </div>
+                  <Skeleton className="h-10 w-full rounded-xl" />
                 </div>
-                <div className="space-y-3 mb-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Total Online</span>
-                    <span className="text-2xl font-bold text-gray-900">{servers.length}</span>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">Servers</h3>
+                    <div className="p-2.5 bg-brand-green-50 rounded-xl text-brand-green-600 group-hover:scale-110 transition-transform">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Active Nodes</span>
-                    <span className="text-lg font-bold text-brand-green-600">{servers.filter((s: any) => s.status === 'ACTIVE').length}</span>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Total Online</span>
+                      <span className="text-2xl font-bold text-gray-900">{servers.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Active Nodes</span>
+                      <span className="text-lg font-bold text-brand-green-600">{servers.filter((s: any) => s.status === 'ACTIVE').length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Maintenance</span>
+                      <span className="text-lg font-bold text-gray-400">{servers.length - servers.filter((s: any) => s.status === 'ACTIVE').length}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Maintenance</span>
-                    <span className="text-lg font-bold text-gray-400">{servers.length - servers.filter((s: any) => s.status === 'ACTIVE').length}</span>
-                  </div>
+                  <Link href="/servers" className="block w-full text-center py-2.5 px-4 bg-brand-green-600 hover:bg-brand-green-700 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md shadow-brand-green-100">
+                    Manage Infrastructure
+                  </Link>
                 </div>
-                <Link href="/servers" className="block w-full text-center py-2.5 px-4 bg-brand-green-600 hover:bg-brand-green-700 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md shadow-brand-green-100">
-                  Manage Infrastructure
-                </Link>
-              </div>
+              )}
             </div>
 
             {/* System Health Card */}
             <div className="group relative bg-white border border-brand-green-100 rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">System Health</h3>
-                  <div className={`p-2.5 rounded-xl text-white group-hover:scale-110 transition-transform ${deploymentStats.down > 0 ? 'bg-red-600' : 'bg-brand-green-600'}`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
+              {loading ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between"><Skeleton className="h-4 w-24" /><Skeleton className="h-8 w-8 rounded-xl" /></div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
+                    <Skeleton className="h-6 w-full" />
                   </div>
+                  <Skeleton className="h-10 w-full rounded-xl" />
                 </div>
-                <div className="space-y-3 mb-6">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">System Uptime</span>
-                    <span className="text-2xl font-bold text-gray-900">
-                      {deploymentStats.deployed > 0
-                        ? `${((deploymentStats.healthy / deploymentStats.deployed) * 100).toFixed(1)}%`
-                        : "100%"}
-                    </span>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">System Health</h3>
+                    <div className={`p-2.5 rounded-xl text-white group-hover:scale-110 transition-transform ${deploymentStats.down > 0 ? 'bg-red-600' : 'bg-brand-green-600'}`}>
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Critical Issues</span>
-                    <span className={`text-lg font-bold ${deploymentStats.down > 0 ? 'text-red-600' : 'text-brand-green-600'}`}>
-                      {deploymentStats.down}
-                    </span>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">System Uptime</span>
+                      <span className="text-2xl font-bold text-gray-900">
+                        {deploymentStats.deployed > 0
+                          ? `${((deploymentStats.healthy / deploymentStats.deployed) * 100).toFixed(1)}%`
+                          : "100%"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Critical Issues</span>
+                      <span className={`text-lg font-bold ${deploymentStats.down > 0 ? 'text-red-600' : 'text-brand-green-600'}`}>
+                        {deploymentStats.down}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 font-medium">Environment</span>
+                      <span className={`px-3 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${deploymentStats.down > 0 ? 'bg-red-50 text-red-700' : 'bg-brand-green-50 text-brand-green-700'}`}>
+                        {deploymentStats.down > 0 ? 'DEGRADED' : 'OPTIMAL'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-medium">Environment</span>
-                    <span className={`px-3 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-wider ${deploymentStats.down > 0 ? 'bg-red-50 text-red-700' : 'bg-brand-green-50 text-brand-green-700'}`}>
-                      {deploymentStats.down > 0 ? 'DEGRADED' : 'OPTIMAL'}
-                    </span>
-                  </div>
+                  <Link href="/projects/deployments" className={`block w-full text-center py-2.5 px-4 rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md ${deploymentStats.down > 0 ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-100' : 'bg-brand-green-600 hover:bg-brand-green-700 text-white shadow-brand-green-100'}`}>
+                    {deploymentStats.down > 0 ? 'Investigate Issues' : 'View System Details'}
+                  </Link>
                 </div>
-                <Link href="/projects/deployments" className={`block w-full text-center py-2.5 px-4 rounded-xl font-bold text-sm transition-all active:scale-[0.98] shadow-md ${deploymentStats.down > 0 ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-100' : 'bg-brand-green-600 hover:bg-brand-green-700 text-white shadow-brand-green-100'}`}>
-                  {deploymentStats.down > 0 ? 'Investigate Issues' : 'View System Details'}
-                </Link>
-              </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Top Stats Section */}
-        {stats && <DashboardStats stats={stats} projects={recentProjects} />}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-white border rounded-xl p-4 shadow-sm h-32 flex flex-col justify-between">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                </div>
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          stats && <DashboardStats stats={stats} projects={recentProjects} />
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content Column (Left 2/3) */}
@@ -399,26 +468,67 @@ export default function DashboardPage() {
             )}
 
             {/* Charts Area - Only for Overseers */}
-            {stats && canOverseeAllProjects(user?.role || "") && (
+            {(canOverseeAllProjects(user?.role || "") || loading) && (
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-xl font-bold text-[var(--text-primary)]">Analytics Overview</h2>
                 </div>
-                <DashboardCharts stats={stats} />
+                {loading ? <ChartsSkeleton /> : (stats && <DashboardCharts stats={stats} />)}
               </section>
             )}
 
             {/* Communication Hub */}
-            <CommunicationHub
-              announcements={announcements}
-              activities={activities}
-              onCreateAnnouncement={isPMRole ? handleCreateAnnouncement : undefined}
-              onViewComments={handleViewComments}
-            />
+            {loading ? (
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm h-[500px] p-6 space-y-4">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <Skeleton className="h-6 w-48 mb-2" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <Skeleton className="h-10 w-32 rounded-lg" />
+                </div>
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="border rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <CommunicationHub
+                announcements={announcements}
+                activities={activities}
+                onCreateAnnouncement={(isPMRole || user?.role === "SECRETARY") ? handleCreateAnnouncement : undefined}
+                onViewComments={handleViewComments}
+              />
+            )}
 
             {/* Recent Projects Table */}
             <section>
-              <RecentProjects projects={recentProjects} />
+              {loading ? (
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6">
+                  <Skeleton className="h-6 w-48" />
+                  <div className="space-y-4">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div key={i} className="flex items-center space-x-4">
+                        <Skeleton className="h-12 w-12 rounded-lg" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <RecentProjects projects={recentProjects} canCreate={canCreateProjects(user.role)} />
+              )}
             </section>
           </div>
 

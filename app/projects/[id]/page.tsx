@@ -8,6 +8,7 @@ import { authService, User } from "@/lib/auth";
 import { UserRole, canAssignDevelopers, canCreateProjects } from "@/lib/roles";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
+import { Skeleton, CardSkeleton } from "@/components/Skeleton"; // Import Skeletons
 import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check } from "lucide-react";
 import TaskBoard from "@/components/tasks/TaskBoard";
 
@@ -224,10 +225,13 @@ export default function ProjectDetailsPage() {
     e.preventDefault();
     if (!newComment.trim()) return;
     try {
-      await api.post(`/comments/project/${params.id}`, { content: newComment });
+      await api.post(`/comments`, {
+        content: newComment,
+        projectId: params.id
+      });
       setNewComment("");
       loadComments();
-      loadLogs(); // Posting a comment might create a log entry if we implemented that? (We didn't yet, but good practice)
+      loadLogs();
     } catch (error) {
       addToast("Failed to post comment.", "error");
     }
@@ -544,14 +548,41 @@ export default function ProjectDetailsPage() {
 
   if (loading || !user || !project) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
-      </div>
+      <AppShell title="Project Details" subtitle="Loading..." userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."} userRole={user?.role}>
+        <main className="max-w-5xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white shadow rounded-lg p-6">
+              <div className="flex justify-between items-start gap-4">
+                <div className="w-full">
+                  <Skeleton className="h-8 w-1/3 mb-2" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+                <Skeleton className="h-8 w-24 rounded-full" />
+              </div>
+            </div>
+            <div className="border-b border-gray-200">
+              <div className="flex gap-4">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+              </div>
+            </div>
+            <div className="space-y-6">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          </div>
+        </main>
+      </AppShell>
     );
   }
 
   return (
-    <AppShell title="Project Details" subtitle={project.name} userName={`${user.firstName} ${user.lastName}`}>
+    <AppShell title="Project Details" subtitle={project.name} userName={`${user.firstName} ${user.lastName}`} userRole={user.role}>
       <main className="max-w-5xl mx-auto space-y-6">
         <div className="flex justify-between items-center">
           <Link href="/projects" className="text-brand-green-600 hover:text-brand-green-800 text-sm">
@@ -848,95 +879,75 @@ export default function ProjectDetailsPage() {
             </div>
           )}
 
-
-          {activeTab === "timeline" && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-6">Activity Timeline</h2>
-              <div className="flow-root">
-                <ul role="list" className="-mb-8">
-                  {logs.map((log, logIdx) => (
-                    <li key={log.id}>
-                      <div className="relative pb-8">
-                        {logIdx !== logs.length - 1 ? (
-                          <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true" />
-                        ) : null}
-                        <div className="relative flex space-x-3">
-                          <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center ring-8 ring-white">
-                            <span className="text-xs font-bold text-brand-green-700">
-                              {log.actor?.firstName?.[0]}{log.actor?.lastName?.[0]}
-                            </span>
-                          </div>
-                          <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                            <div>
-                              <p className="text-sm text-gray-500">
-                                <span className="font-medium text-gray-900">
-                                  {log.actor?.firstName} {log.actor?.lastName}
-                                </span>{' '}
-                                {log.description}
-                              </p>
-                            </div>
-                            <div className="whitespace-nowrap text-right text-sm text-gray-500">
-                              <time dateTime={log.timestamp}>{new Date(log.timestamp).toLocaleString()}</time>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                  {logs.length === 0 && (
-                    <li className="text-gray-500 text-sm italic">No activity recorded yet.</li>
-                  )}
-                </ul>
-              </div>
-            </div>
-          )}
-
           {activeTab === "comments" && (
-            <div className="bg-white shadow rounded-lg p-6 min-h-[500px] flex flex-col">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Comments</h2>
+            <div className="bg-white shadow-sm border border-gray-100 rounded-xl p-8 min-h-[600px] flex flex-col">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">Comments</h2>
 
-              <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 max-h-[600px] custom-scrollbar">
-                {/* ... comments list ... */}
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center text-brand-green-700 font-bold text-xs">
-                      {comment.author?.firstName?.[0]}{comment.author?.lastName?.[0]}
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-3 flex-1">
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm font-semibold text-gray-900">
-                          {comment.author?.firstName} {comment.author?.lastName}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(comment.createdAt).toLocaleString()}
-                        </span>
+              <div className="flex-1 overflow-y-auto mb-6 space-y-6 pr-4 custom-scrollbar">
+                {comments.length > 0 ? (
+                  comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-4 group">
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-brand-green-100 flex items-center justify-center text-brand-green-700 font-bold text-sm shadow-sm ring-2 ring-white">
+                        {comment.author?.firstName?.[0]}{comment.author?.lastName?.[0]}
                       </div>
-                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                      <div className="bg-gray-50/80 hover:bg-gray-50 rounded-2xl p-4 flex-1 transition-colors border border-transparent hover:border-gray-100">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-sm font-bold text-gray-900">
+                            {comment.author?.firstName} {comment.author?.lastName}
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-400">
+                            {new Date(comment.createdAt).toLocaleString(undefined, {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                    <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
+                    <p className="text-sm">No comments yet. Start the conversation!</p>
                   </div>
-                ))}
+                )}
               </div>
 
               {canComment ? (
-                <form onSubmit={postComment} className="mt-auto">
-                  <div className="relative">
+                <form onSubmit={postComment} className="mt-auto pt-4 border-t border-gray-100">
+                  <div className="relative group">
                     <textarea
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Write a comment..."
-                      className="w-full rounded-lg border-gray-300 pr-12 focus:border-brand-green-500 focus:ring-brand-green-500 min-h-[80px]"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          postComment(e as any);
+                        }
+                      }}
+                      placeholder="Write your comment here..."
+                      className="w-full rounded-xl border-gray-300 pr-14 pb-12 pt-4 pl-4 focus:border-brand-green-500 focus:ring-1 focus:ring-brand-green-500 min-h-[120px] shadow-sm resize-none transition-all placeholder:text-gray-400 text-sm"
                     />
-                    <button
-                      type="submit"
-                      disabled={!newComment.trim()}
-                      className="absolute bottom-3 right-3 p-1.5 bg-brand-green-600 text-white rounded-md hover:bg-brand-green-700 disabled:opacity-50"
-                    >
-                      <Send className="h-4 w-4" />
-                    </button>
+                    <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                      <span className="text-xs text-gray-400 font-medium invisible group-focus-within:visible transition-opacity">
+                        Press Enter to submit
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={!newComment.trim()}
+                        className="p-2.5 bg-brand-green-600 text-white rounded-lg hover:bg-brand-green-700 disabled:opacity-50 disabled:hover:bg-brand-green-600 transition-all shadow-md hover:shadow-lg active:scale-95"
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </form>
               ) : (
-                <div className="text-center py-4 bg-gray-50 rounded-lg text-gray-500 text-sm italic">
+                <div className="text-center py-6 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-500 text-sm">
                   You do not have permission to post comments.
                 </div>
               )}
@@ -1092,7 +1103,7 @@ export default function ProjectDetailsPage() {
                                       {doc.isArchived && <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Archived</span>}
                                       {doc.confidentiality && !doc.isFolder && (
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${doc.confidentiality === 'CONFIDENTIAL' ? 'bg-red-100 text-red-800' :
-                                            'bg-green-100 text-green-800'
+                                          'bg-green-100 text-green-800'
                                           }`}>
                                           {doc.confidentiality}
                                         </span>

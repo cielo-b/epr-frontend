@@ -21,9 +21,10 @@ interface Project {
 
 interface RecentProjectsProps {
     projects: Project[];
+    canCreate?: boolean;
 }
 
-export function RecentProjects({ projects }: RecentProjectsProps) {
+export function RecentProjects({ projects, canCreate = true }: RecentProjectsProps) {
     const recent = useMemo(() => {
         return projects ? projects.slice(0, 5) : [];
     }, [projects]);
@@ -36,14 +37,18 @@ export function RecentProjects({ projects }: RecentProjectsProps) {
                 </div>
                 <h3 className="text-lg font-medium text-[var(--text-primary)]">No Projects Yet</h3>
                 <p className="text-[var(--text-secondary)] mb-4 max-w-xs mx-auto">
-                    Start by creating your first project to track progress and team performance.
+                    {canCreate
+                        ? "Start by creating your first project to track progress and team performance."
+                        : "No recent projects to display."}
                 </p>
-                <Link
-                    href="/projects" // Using /projects as /projects/new might not exist directly without a list
-                    className="text-sm font-medium bg-brand-green-600 text-white px-4 py-2 rounded-lg hover:bg-brand-green-700 transition"
-                >
-                    Create Project
-                </Link>
+                {canCreate && (
+                    <Link
+                        href="/projects" // Using /projects as /projects/new might not exist directly without a list
+                        className="text-sm font-medium bg-brand-green-600 text-white px-4 py-2 rounded-lg hover:bg-brand-green-700 transition"
+                    >
+                        Create Project
+                    </Link>
+                )}
             </div>
         );
     }

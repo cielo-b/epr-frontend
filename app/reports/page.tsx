@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import Link from "next/link";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
+import { TableSkeleton, Skeleton } from "@/components/Skeleton";
 
 type Report = {
   id: string;
@@ -14,7 +15,8 @@ type Report = {
   content: string;
   type: string;
   project?: { id: string; name: string } | null;
-  createdBy?: { firstName: string; lastName: string } | null;
+  createdById?: string;
+  createdBy?: { id?: string; firstName: string; lastName: string } | null;
   createdAt: string;
   confidentiality: "CONFIDENTIAL" | "PUBLIC";
 };
@@ -160,9 +162,23 @@ export default function ReportsPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        Loading...
-      </div>
+      <AppShell
+        title="Reports"
+        subtitle="View and manage reports"
+        userName={user ? `${user.firstName} ${user.lastName}` : "Loading..."}
+        userRole={user?.role}
+      >
+        <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <Skeleton className="h-8 w-44" />
+            <Skeleton className="h-8 w-52" />
+          </div>
+          <div className="flex justify-end mb-3">
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+        <TableSkeleton rows={10} columns={6} />
+      </AppShell>
     );
   }
 
@@ -259,15 +275,17 @@ export default function ReportsPage() {
                       <Link href={`/reports/${report.id}`} className="btn-ghost btn-sm text-brand-green-600 hover:text-brand-green-800">
                         View
                       </Link>
-                      <button
-                        onClick={() => {
-                          setConfirmReport(report);
-                          setConfirmOpen(true);
-                        }}
-                        className="btn btn-danger btn-sm"
-                      >
-                        Delete
-                      </button>
+                      {user && (["PROJECT_MANAGER", "BOSS", "SUPERADMIN"].includes(user.role) || report.createdById === user.id || report.createdBy?.id === user.id) && (
+                        <button
+                          onClick={() => {
+                            setConfirmReport(report);
+                            setConfirmOpen(true);
+                          }}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

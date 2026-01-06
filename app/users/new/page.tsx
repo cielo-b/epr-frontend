@@ -10,7 +10,7 @@ import { useToast } from "@/components/ToastProvider";
 
 type CreateUserPayload = {
   email: string;
-  password: string;
+
   firstName: string;
   lastName: string;
   role: UserRole;
@@ -24,7 +24,7 @@ export default function NewUserPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<CreateUserPayload>({
     email: "",
-    password: "",
+
     firstName: "",
     lastName: "",
     role: UserRole.DEVELOPER,
@@ -147,23 +147,7 @@ export default function NewUserPage() {
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Temporary Password
-                  </label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={form.password}
-                    onChange={handleChange}
-                    required
-                    minLength={6}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    Share this with the user so they can log in. They should change it after login.
-                  </p>
-                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Role

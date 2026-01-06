@@ -88,7 +88,7 @@ export function QuickActionModals({ type, onClose, onSuccess }: QuickActionModal
                 await api.post("/announcements", {
                     message,
                     priority,
-                    projectId: selectedProjectId,
+                    projectId: selectedProjectId || undefined,
                 });
                 onSuccess("Announcement posted successfully!");
             } else if (type === "meeting") {
@@ -167,9 +167,8 @@ export function QuickActionModals({ type, onClose, onSuccess }: QuickActionModal
                 return (
                     <>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Select Project</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Select Project (Optional)</label>
                             <select
-                                required
                                 className="w-full border border-gray-300 rounded-lg p-2.5 bg-white text-gray-900"
                                 value={selectedProjectId}
                                 onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -179,6 +178,9 @@ export function QuickActionModals({ type, onClose, onSuccess }: QuickActionModal
                                     <option key={p.id} value={p.id}>{p.name}</option>
                                 ))}
                             </select>
+                            <p className="text-xs text-gray-500 mt-1 italic">
+                                Note: If no project is selected, the announcement will be visible to all users.
+                            </p>
                         </div>
                         <div className="mt-4 text-gray-900">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
