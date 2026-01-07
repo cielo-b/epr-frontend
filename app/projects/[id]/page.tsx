@@ -9,7 +9,8 @@ import { UserRole, canAssignDevelopers, canCreateProjects } from "@/lib/roles";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
 import { Skeleton, CardSkeleton } from "@/components/Skeleton"; // Import Skeletons
-import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check } from "lucide-react";
+import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check, Search, ChevronDown } from "lucide-react";
+
 import TaskBoard from "@/components/tasks/TaskBoard";
 
 type Project = {
@@ -25,6 +26,7 @@ type Project = {
     id: string;
     developerId: string;
     developer: { id: string; firstName: string; lastName: string; email: string };
+    role?: string;
   }[];
   githubUrl?: string;
   deployUrl?: string;
@@ -44,9 +46,6 @@ type ProjectDocument = {
   version?: number;
   confidentiality?: "CONFIDENTIAL" | "PUBLIC";
 };
-
-
-
 
 type ActivityLog = {
   id: string;
@@ -77,8 +76,12 @@ export default function ProjectDetailsPage() {
   const [vaultContent, setVaultContent] = useState("");
   const [savingVault, setSavingVault] = useState(false);
   const [assignForm, setAssignForm] = useState({
-    developerId: "",
+    developerIds: [] as string[],
+    search: "",
     notes: "",
+    role: "General",
+    customRole: "",
+    isDropdownOpen: false,
   });
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -244,22 +247,23 @@ export default function ProjectDetailsPage() {
 
   const assignDeveloper = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!assignForm.developerId) {
-      addToast("Please select a developer.", "error");
+    if (assignForm.developerIds.length === 0) {
+      addToast("Please select at least one developer.", "error");
       return;
     }
     setAssigning(true);
     try {
       await api.post(`/projects/${params.id}/assign-developer`, {
-        developerId: assignForm.developerId,
+        developerIds: assignForm.developerIds,
         notes: assignForm.notes || undefined,
+        role: assignForm.role === "Other" ? assignForm.customRole : assignForm.role,
       });
-      addToast("Developer assigned successfully.");
-      setAssignForm({ developerId: "", notes: "" });
+      addToast("Developers assigned successfully.");
+      setAssignForm(prev => ({ ...prev, developerIds: [], notes: "", role: "General", customRole: "", isDropdownOpen: false, search: "" }));
       await loadProject();
       loadLogs();
     } catch (error: any) {
-      const message = error?.response?.data?.message || "Failed to assign developer.";
+      const message = error?.response?.data?.message || "Failed to assign developers.";
       addToast(Array.isArray(message) ? message.join(", ") : message, "error");
     } finally {
       setAssigning(false);
@@ -806,14 +810,26 @@ export default function ProjectDetailsPage() {
                   <h2 className="text-lg font-semibold text-gray-900">Assigned Developers</h2>
                 </div>
                 {project.assignments && project.assignments.length > 0 ? (
-                  <ul className="divide-y divide-gray-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {project.assignments.map((a) => (
-                      <li key={a.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {a.developer?.firstName} {a.developer?.lastName}
-                          </p>
-                          <p className="text-xs text-gray-600">{a.developer?.email}</p>
+                      <div key={a.id} className="relative group bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-4">
+                          <div className="h-10 w-10 shrink-0 rounded-full bg-brand-green-100 flex items-center justify-center text-brand-green-700 font-bold text-sm shadow-sm ring-2 ring-white">
+                            {a.developer?.firstName?.[0]}{a.developer?.lastName?.[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="text-sm font-semibold text-gray-900 truncate">
+                                {a.developer?.firstName} {a.developer?.lastName}
+                              </h3>
+                            </div>
+                            <p className="text-xs text-gray-500 truncate mb-2">{a.developer?.email}</p>
+                            {a.role && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-brand-green-50 text-brand-green-700 border border-brand-green-100">
+                                {a.role}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {canAssign && (
                           <button
@@ -825,56 +841,167 @@ export default function ProjectDetailsPage() {
                               })
                             }
                             disabled={removing === a.developerId}
-                            className="px-3 py-1 text-xs rounded-md bg-brand-red-100 text-brand-red-800 hover:bg-brand-red-200 disabled:opacity-60"
+                            className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Remove developer"
                           >
-                            {removing === a.developerId ? "Removing..." : "Remove"}
+                            <X className="h-4 w-4" />
                           </button>
                         )}
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-sm text-gray-600">No developers assigned.</p>
+                  <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    <div className="mx-auto h-12 w-12 text-gray-400">
+                      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No developers assigned</h3>
+                    <p className="mt-1 text-sm text-gray-500">Get started by assigning team members to this project.</p>
+                  </div>
                 )}
 
                 {canAssign && (
-                  <form onSubmit={assignDeveloper} className="mt-6 space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Select Developer</label>
-                        <select
-                          name="developerId"
-                          value={assignForm.developerId}
-                          onChange={handleAssignChange}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                          required
-                        >
-                          <option value="">-- Choose developer --</option>
-                          {developers.map((dev) => (
-                            <option key={dev.id} value={dev.id}>
-                              {dev.firstName} {dev.lastName} ({dev.email})
-                            </option>
-                          ))}
-                        </select>
+                  <form onSubmit={assignDeveloper} className="mt-8 bg-gray-50 rounded-xl p-6 border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider flex items-center gap-2">
+                      <Plus className="h-4 w-4" /> Assign New Developers
+                    </h3>
+                    <div className="space-y-4">
+                      {/* Multi-select Dropdown */}
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select Developers</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setAssignForm(prev => ({ ...prev, isDropdownOpen: !prev.isDropdownOpen }))}
+                            className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-left text-sm focus:outline-none focus:ring-2 focus:ring-brand-green-500 focus:border-brand-green-500 shadow-sm flex items-center justify-between"
+                          >
+                            <span className={assignForm.developerIds.length === 0 ? "text-gray-500" : "text-gray-900"}>
+                              {assignForm.developerIds.length === 0
+                                ? "Search and select developers..."
+                                : `${assignForm.developerIds.length} developer${assignForm.developerIds.length === 1 ? '' : 's'} selected`}
+                            </span>
+                            <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${assignForm.isDropdownOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {assignForm.isDropdownOpen && (
+                            <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-lg border border-gray-200 py-1 max-h-80 overflow-auto">
+                              <div className="px-3 py-2 sticky top-0 bg-white border-b border-gray-100">
+                                <div className="relative">
+                                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    value={assignForm.search}
+                                    onChange={(e) => setAssignForm(prev => ({ ...prev, search: e.target.value }))}
+                                    placeholder="Filter by name..."
+                                    className="w-full pl-9 pr-3 py-2 text-sm border-gray-200 rounded-md bg-gray-50 focus:bg-white focus:border-brand-green-500 focus:ring-brand-green-500"
+                                    autoFocus
+                                  />
+                                </div>
+                              </div>
+                              <div className="py-1">
+                                {developers
+                                  .filter(dev =>
+                                    `${dev.firstName} ${dev.lastName}`.toLowerCase().includes(assignForm.search.toLowerCase()) ||
+                                    dev.email.toLowerCase().includes(assignForm.search.toLowerCase())
+                                  )
+                                  .map((dev) => {
+                                    const isSelected = assignForm.developerIds.includes(dev.id);
+                                    const isAlreadyAssigned = project?.assignments?.some(a => a.developerId === dev.id);
+
+                                    if (isAlreadyAssigned) return null;
+
+                                    return (
+                                      <div
+                                        key={dev.id}
+                                        onClick={() => {
+                                          setAssignForm(prev => {
+                                            const newIds = isSelected
+                                              ? prev.developerIds.filter(id => id !== dev.id)
+                                              : [...prev.developerIds, dev.id];
+                                            return { ...prev, developerIds: newIds };
+                                          });
+                                        }}
+                                        className={`px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors ${isSelected ? 'bg-brand-green-50' : ''}`}
+                                      >
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-brand-green-600 border-brand-green-600' : 'border-gray-300 bg-white'}`}>
+                                          {isSelected && <Check className="h-3 w-3 text-white" />}
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-900">{dev.firstName} {dev.lastName}</div>
+                                          <div className="text-xs text-gray-500">{dev.email}</div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                {developers.filter(d => !project?.assignments?.some(a => a.developerId === d.id)).length === 0 && (
+                                  <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                    All available developers are assigned.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {/* Overlay to close dropdown */}
+                        {assignForm.isDropdownOpen && (
+                          <div
+                            className="fixed inset-0 z-0"
+                            onClick={() => setAssignForm(prev => ({ ...prev, isDropdownOpen: false }))}
+                          ></div>
+                        )}
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Notes (optional)</label>
-                        <input
-                          name="notes"
-                          value={assignForm.notes}
-                          onChange={handleAssignChange}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500"
-                          placeholder="e.g., scope or responsibilities"
-                        />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Role / Tag</label>
+                          <select
+                            name="role"
+                            value={assignForm.role}
+                            onChange={handleAssignChange}
+                            className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 text-sm py-2.5"
+                          >
+                            {["General", "Backend", "Frontend", "Fullstack", "Mobile", "DevOps", "QA", "Design", "Product", "Other"].map(r => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                          {assignForm.role === "Other" && (
+                            <input
+                              type="text"
+                              name="customRole"
+                              value={assignForm.customRole}
+                              onChange={handleAssignChange}
+                              placeholder="Specify role..."
+                              className="mt-2 block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 text-sm py-2"
+                              required
+                            />
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                          <input
+                            name="notes"
+                            value={assignForm.notes}
+                            onChange={handleAssignChange}
+                            className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-brand-green-500 focus:ring-brand-green-500 text-sm py-2.5"
+                            placeholder="e.g., specific responsibilities"
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div className="flex justify-end">
-                      <button type="submit" disabled={assigning} className="btn btn-primary">
-                        {assigning ? "Assigning..." : "Assign Developer"}
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={assigning || assignForm.developerIds.length === 0}
+                        className="btn btn-primary px-6 py-2.5 shadow-lg shadow-brand-green-600/20"
+                      >
+                        {assigning ? "Assigning..." : `Assign ${assignForm.developerIds.length > 0 ? `${assignForm.developerIds.length} ` : ""}Developers`}
                       </button>
                     </div>
                   </form>
                 )}
+
               </div>
             </div>
           )}
