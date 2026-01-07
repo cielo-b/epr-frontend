@@ -87,8 +87,9 @@ const navItems: NavItem[] = [
 export function AppShell({
   title,
   subtitle,
-  userName,
-  userRole,
+  userName: initialUserName,
+  userRole: initialUserRole,
+  avatarUrl: initialAvatarUrl,
   children,
   onLogout,
 }: {
@@ -96,6 +97,7 @@ export function AppShell({
   subtitle?: string;
   userName?: string;
   userRole?: string;
+  avatarUrl?: string;
   children: React.ReactNode;
   onLogout?: () => void;
 }) {
@@ -103,7 +105,27 @@ export function AppShell({
   const router = useRouter();
   const [profileMenuOpen, setProfileMenuOpen] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const currentUser = authService.getUser();
+    if (currentUser) {
+      setUser(currentUser);
+    }
+  }, []);
+
+  const userName = initialUserName || (user ? `${user.firstName} ${user.lastName}` : "User");
+  const userRole = initialUserRole || user?.role || "Member";
+  const avatarUrl = initialAvatarUrl || user?.avatarUrl;
+
+  const getAttachmentUrl = (path: string | undefined) => {
+    if (!path) return "";
+    if (path.startsWith('http')) return path;
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api").replace(/\/api\/?$/, '');
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseUrl}${cleanPath}`;
+  };
 
   const handleLogout = React.useCallback(() => {
     setProfileMenuOpen(false);
@@ -235,8 +257,12 @@ export function AppShell({
                 <div className="text-sm font-semibold text-[var(--text-primary)]">{userName || "User"}</div>
                 <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide">{userRole || "Member"}</div>
               </div>
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand-green-100 to-brand-green-200 flex items-center justify-center text-brand-green-800 font-bold shadow-sm ring-2 ring-white">
-                {userName ? userName[0]?.toUpperCase() : "U"}
+              <div className="h-9 w-9 rounded-full overflow-hidden bg-gradient-to-br from-brand-green-100 to-brand-green-200 flex items-center justify-center text-brand-green-800 font-bold shadow-sm ring-2 ring-white">
+                {avatarUrl ? (
+                  <img src={getAttachmentUrl(avatarUrl)} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  userName ? userName[0]?.toUpperCase() : "U"
+                )}
               </div>
             </button>
 

@@ -12,6 +12,7 @@ export interface User {
     resourceId?: string | null;
     constraints?: Record<string, any> | null;
   }[];
+  avatarUrl?: string;
 }
 
 export interface LoginResponse {
