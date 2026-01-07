@@ -57,9 +57,20 @@ export default function ChatPage() {
     const [deleteTarget, setDeleteTarget] = useState<{ type: 'message' | 'conversation', id: string } | null>(null);
     const [imageViewerOpen, setImageViewerOpen] = useState(false);
     const [viewerImageUrl, setViewerImageUrl] = useState("");
+    const [isSidebarVisibleOnMobile, setIsSidebarVisibleOnMobile] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { addToast } = useToast();
+
+    const getAttachmentUrl = (path: string | undefined) => {
+        if (!path) return "";
+        if (path.startsWith('http')) return path;
+
+        // More robust replacement of the /api suffix
+        const baseUrl = API_URL.replace(/\/api\/?$/, '');
+        const cleanPath = path.startsWith('/') ? path : `/${path}`;
+        return `${baseUrl}${cleanPath}`;
+    };
 
     // Initialize User and Socket
     useEffect(() => {
@@ -67,8 +78,13 @@ export default function ChatPage() {
         if (currentUser) {
             setUser(currentUser);
 
+            // Handle initial view state based on screen size
+            if (window.innerWidth < 768 && activeConversationId) {
+                setIsSidebarVisibleOnMobile(false);
+            }
+
             // Determine Socket URL (Base URL of API)
-            const socketUrl = API_URL.replace('/api', '');
+            const socketUrl = getAttachmentUrl("");
             const newSocket = io(`${socketUrl}/chat`, {
                 query: { userId: currentUser.id },
                 transports: ['websocket']
@@ -85,9 +101,6 @@ export default function ChatPage() {
 
             newSocket.on('conversationUpdated', (updatedConv: Conversation) => {
                 setConversations(prev => prev.map(c => c.id === updatedConv.id ? updatedConv : c));
-                if (activeConversationId === updatedConv.id) {
-                    // Force re-render or logic if needed, but react handles it via conversations state
-                }
             });
 
             newSocket.on('participantRemoved', ({ conversationId, userId }: { conversationId: string, userId: string }) => {
@@ -107,8 +120,6 @@ export default function ChatPage() {
             });
 
             newSocket.on('messageDeleted', ({ messageId, conversationId }: { messageId: string, conversationId: string }) => {
-                // We no longer filter out messages because we show a "deleted" banner
-                // But we reload conversations so the sidebar shows "This message was deleted"
                 loadConversations();
             });
 
@@ -126,7 +137,7 @@ export default function ChatPage() {
                 newSocket.disconnect();
             };
         }
-    }, []);
+    }, [activeConversationId]);
 
     // Load Conversations
     useEffect(() => {
@@ -184,21 +195,10 @@ export default function ChatPage() {
 
         if ((!newMessage.trim() && !attachmentUrl) || !activeConversationId || !user || !socket) return;
 
-        const tempId = Date.now().toString();
         const content = newMessage.trim();
 
-        // Optimistic update? Maybe risky if socket fails. 
-        // Let's settle for API call + Socket broadcast.
-        // Actually, sending via Socket is faster for UI, but let's use API to be robust as requested by controller setup
-        // controller calls service.sendMessage
-
-        // BUT we also have socket gateway listening to 'sendMessage'.
-        // Let's use the socket event for sending if we want "real-time" feel, but REST is safer for persistence confirmation.
-        // Code below uses REST as primary.
-
         try {
-            // Using REST for reliability and broadcasting
-            const response = await api.post('/chat/messages', {
+            await api.post('/chat/messages', {
                 conversationId: activeConversationId,
                 content: content || "",
                 attachmentUrl,
@@ -207,8 +207,6 @@ export default function ChatPage() {
 
             setNewMessage("");
             if (editingMessageId) setEditingMessageId(null);
-
-            // Reload messages to ensure we have the latest (including the one we just sent)
             await loadMessages(activeConversationId);
         } catch (err) {
             addToast("Failed to send message", "error");
@@ -222,13 +220,14 @@ export default function ChatPage() {
             const res = await api.post('/chat/conversations', {
                 participantIds: selectedUserIds,
                 isGroup: selectedUserIds.length > 1,
-                name: selectedUserIds.length > 1 ? "New Group" : undefined // Naming could be improved
+                name: selectedUserIds.length > 1 ? "New Group" : undefined
             });
 
             setConversations(prev => [res.data, ...prev]);
             setActiveConversationId(res.data.id);
             setIsNewChatModalOpen(false);
             setSelectedUserIds([]);
+            setIsSidebarVisibleOnMobile(false);
         } catch (err) {
             addToast("Failed to create conversation", "error");
         }
@@ -237,7 +236,6 @@ export default function ChatPage() {
     const openNewChatModal = async () => {
         try {
             const res = await api.get('/users');
-            // Filter out self
             const others = res.data.filter((u: User) => u.id !== user?.id);
             setAvailableUsers(others);
             setIsNewChatModalOpen(true);
@@ -256,10 +254,7 @@ export default function ChatPage() {
         if (!activeConversationId || !groupName.trim()) return;
         try {
             await api.patch(`/chat/conversations/${activeConversationId}`, { name: groupName });
-            setGroupName(""); // Reset or keep? Better keep or update local temporarily
-
-            // We rely on socket for update, but to be responsive:
-            // Actually, let's wait for socket.
+            setGroupName("");
         } catch (err) {
             addToast("Failed to update group name", "error");
         }
@@ -297,17 +292,11 @@ export default function ChatPage() {
             const res = await api.post('/chat/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            // Send message with attachment immediately? Or put in input?
-            // Sending immediately for simplicity, but maybe content is nice.
-            // Let's assume we send immediately with empty content or generic "Sent a file".
-            // Or better: update state to show "Attached: filename" and wait for send?
-            // For now: send immediately.
             await handleSendMessage(undefined, res.data.url, res.data.type);
             addToast("Attachment sent");
         } catch (err) {
             addToast("Failed to upload file", "error");
         }
-        // Reset input
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
@@ -315,8 +304,7 @@ export default function ChatPage() {
         try {
             await api.patch(`/chat/messages/${messageId}`, { content: newContent });
             setEditingMessageId(null);
-            setNewMessage(""); // Clear input if it was used for editing?
-            // Note: UI needs to handle "Editing Mode" where input field is populated.
+            setNewMessage("");
         } catch (err) {
             addToast("Failed to edit message", "error");
         }
@@ -353,7 +341,6 @@ export default function ChatPage() {
     };
 
     const handleDownloadFile = (url: string, filename?: string) => {
-        // Create a temporary anchor element to trigger download
         const link = document.createElement('a');
         link.href = url;
         link.download = filename || url.split('/').pop() || 'download';
@@ -370,7 +357,6 @@ export default function ChatPage() {
         }
     };
 
-    // Helper to get conversation display name
     const getConversationName = (conv: Conversation) => {
         if (conv.name) return conv.name;
         const otherParticipants = conv.participants.filter(p => p.user.id !== user?.id);
@@ -383,10 +369,10 @@ export default function ChatPage() {
 
     return (
         <AppShell title="Team Chat" userName={user?.firstName} userRole={user?.role}>
-            <div className="flex h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="flex h-[calc(100vh-10rem)] md:h-[calc(100vh-8rem)] bg-white rounded-xl md:rounded-2xl shadow-sm border border-gray-200 overflow-hidden relative">
 
                 {/* Sidebar */}
-                <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50/50">
+                <div className={`${isSidebarVisibleOnMobile ? 'w-full flex' : 'hidden'} md:flex md:w-80 border-r border-gray-200 flex-col bg-gray-50/50 absolute inset-0 md:relative z-20`}>
                     <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-gray-50/50 backdrop-blur-sm z-10">
                         <h2 className="font-bold text-gray-800 text-lg">Messages</h2>
                         <button
@@ -420,7 +406,10 @@ export default function ChatPage() {
                                 return (
                                     <div
                                         key={conv.id}
-                                        onClick={() => setActiveConversationId(conv.id)}
+                                        onClick={() => {
+                                            setActiveConversationId(conv.id);
+                                            setIsSidebarVisibleOnMobile(false);
+                                        }}
                                         className={`p-4 cursor-pointer hover:bg-gray-100 transition-colors border-b border-gray-100 last:border-0 ${isActive ? 'bg-white border-l-4 border-l-brand-green-500 shadow-sm' : 'border-l-4 border-l-transparent'}`}
                                     >
                                         <div className="flex items-start gap-3">
@@ -437,7 +426,6 @@ export default function ChatPage() {
                                                         : <span className="italic text-gray-400">No messages yet</span>}
                                                 </p>
                                             </div>
-                                            {/* Time could go here */}
                                         </div>
                                     </div>
                                 );
@@ -447,19 +435,25 @@ export default function ChatPage() {
                 </div>
 
                 {/* Main Chat Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-white">
+                <div className={`flex-1 flex flex-col min-w-0 bg-white ${!isSidebarVisibleOnMobile ? 'flex w-full' : 'hidden md:flex'}`}>
                     {activeConversation ? (
                         <>
                             {/* Header */}
-                            <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white sticky top-0 z-10">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-lg">
+                            <div className="h-14 md:h-16 border-b border-gray-200 flex items-center justify-between px-3 md:px-6 bg-white sticky top-0 z-10">
+                                <div className="flex items-center gap-2 md:gap-3">
+                                    <button
+                                        onClick={() => setIsSidebarVisibleOnMobile(true)}
+                                        className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg mr-1"
+                                    >
+                                        <X className="h-5 w-5 rotate-90" />
+                                    </button>
+                                    <div className="h-9 w-9 md:h-10 md:w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-base md:text-lg">
                                         {getConversationName(activeConversation).charAt(0)}
                                     </div>
-                                    <div>
-                                        <h2 className="font-bold text-gray-900">{getConversationName(activeConversation)}</h2>
-                                        <p className="text-xs text-green-600 flex items-center gap-1">
-                                            <span className="w-2 h-2 rounded-full bg-green-500 block"></span> Online
+                                    <div className="min-w-0">
+                                        <h2 className="font-bold text-gray-900 truncate text-sm md:text-base">{getConversationName(activeConversation)}</h2>
+                                        <p className="text-[10px] md:text-xs text-green-600 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-500 block"></span> Online
                                         </p>
                                     </div>
                                 </div>
@@ -480,18 +474,18 @@ export default function ChatPage() {
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30 custom-scrollbar space-y-4">
+                            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50/30 custom-scrollbar space-y-4">
                                 {messages.map((msg, idx) => {
                                     const isMe = msg.sender?.id === user?.id;
                                     const showAvatar = idx === 0 || messages[idx - 1].sender.id !== msg.sender.id;
 
                                     return (
-                                        <div key={msg.id} className={`flex gap-3 group/msg ${isMe ? 'flex-row-reverse' : ''}`}>
-                                            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${showAvatar ? (isMe ? 'bg-brand-green-100 text-brand-green-700' : 'bg-gray-200 text-gray-700') : 'invisible'}`}>
+                                        <div key={msg.id} className={`flex gap-2 md:gap-3 group/msg ${isMe ? 'flex-row-reverse' : ''}`}>
+                                            <div className={`h-7 w-7 md:h-8 md:w-8 rounded-full flex items-center justify-center text-[10px] md:text-xs font-bold shrink-0 ${showAvatar ? (isMe ? 'bg-brand-green-100 text-brand-green-700' : 'bg-gray-200 text-gray-700') : 'invisible'}`}>
                                                 {msg.sender.firstName[0]}
                                             </div>
-                                            <div className={`max-w-[70%] space-y-1`}>
-                                                <div className={`px-4 py-2 rounded-2xl shadow-sm text-sm relative ${msg.isDeleted ? 'bg-gray-100 border border-gray-200 text-gray-400 italic rounded-br-none' : (isMe ? 'bg-brand-green-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none')}`}>
+                                            <div className={`max-w-[85%] md:max-w-[70%] space-y-1`}>
+                                                <div className={`px-3 py-2 md:px-4 md:py-2 rounded-2xl shadow-sm text-xs md:text-sm relative ${msg.isDeleted ? 'bg-gray-100 border border-gray-200 text-gray-400 italic rounded-br-none' : (isMe ? 'bg-brand-green-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none')}`}>
                                                     {msg.isDeleted ? (
                                                         <div className="flex items-center gap-2">
                                                             <Trash className="h-3 w-3 opacity-50" />
@@ -504,18 +498,18 @@ export default function ChatPage() {
                                                                     {msg.attachmentType?.startsWith('image/') ? (
                                                                         <div className="relative group/img">
                                                                             <img
-                                                                                src={`${API_URL.replace('/api', '')}${msg.attachmentUrl}`}
+                                                                                src={getAttachmentUrl(msg.attachmentUrl)}
                                                                                 alt="attachment"
                                                                                 className="rounded-lg max-h-48 object-cover bg-black/10 cursor-pointer hover:opacity-90 transition-opacity"
                                                                                 onClick={() => {
-                                                                                    setViewerImageUrl(`${API_URL.replace('/api', '')}${msg.attachmentUrl}`);
+                                                                                    setViewerImageUrl(getAttachmentUrl(msg.attachmentUrl));
                                                                                     setImageViewerOpen(true);
                                                                                 }}
                                                                             />
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
-                                                                                    handleDownloadFile(`${API_URL.replace('/api', '')}${msg.attachmentUrl}`);
+                                                                                    handleDownloadFile(getAttachmentUrl(msg.attachmentUrl));
                                                                                 }}
                                                                                 className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity"
                                                                             >
@@ -525,12 +519,12 @@ export default function ChatPage() {
                                                                     ) : msg.attachmentType?.startsWith('video/') ? (
                                                                         <div className="relative">
                                                                             <video
-                                                                                src={`${API_URL.replace('/api', '')}${msg.attachmentUrl}`}
+                                                                                src={getAttachmentUrl(msg.attachmentUrl)}
                                                                                 controls
                                                                                 className="rounded-lg max-h-64 w-full bg-black"
                                                                             />
                                                                             <button
-                                                                                onClick={() => handleDownloadFile(`${API_URL.replace('/api', '')}${msg.attachmentUrl}`)}
+                                                                                onClick={() => handleDownloadFile(getAttachmentUrl(msg.attachmentUrl))}
                                                                                 className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg"
                                                                             >
                                                                                 <Download className="h-4 w-4 text-white" />
@@ -538,7 +532,7 @@ export default function ChatPage() {
                                                                         </div>
                                                                     ) : (
                                                                         <button
-                                                                            onClick={() => handleDownloadFile(`${API_URL.replace('/api', '')}${msg.attachmentUrl}`)}
+                                                                            onClick={() => handleDownloadFile(getAttachmentUrl(msg.attachmentUrl))}
                                                                             className={`flex items-center gap-2 p-2 rounded-lg w-full ${isMe ? 'bg-brand-green-700/50' : 'bg-gray-100'} hover:opacity-80 transition-opacity`}
                                                                         >
                                                                             <File className="h-4 w-4" />
@@ -551,13 +545,12 @@ export default function ChatPage() {
                                                             {msg.content}
 
                                                             {/* Message Actions */}
-                                                            {isMe && (
-                                                                <div className={`absolute top-0 ${isMe ? '-left-16' : '-right-16'} hidden group-hover/msg:flex gap-1 bg-white shadow-md rounded-lg p-1 border border-gray-100`}>
+                                                            {isMe && !msg.isDeleted && (
+                                                                <div className={`absolute top-0 ${isMe ? '-left-14 md:-left-16' : '-right-14 md:-right-16'} hidden group-hover/msg:flex gap-1 bg-white shadow-md rounded-lg p-1 border border-gray-100`}>
                                                                     <button
                                                                         onClick={() => {
                                                                             setEditingMessageId(msg.id);
                                                                             setNewMessage(msg.content);
-                                                                            if (fileInputRef.current) fileInputRef.current.focus();
                                                                         }}
                                                                         className="p-1 hover:bg-gray-100 rounded text-gray-600"
                                                                         title="Edit"
@@ -588,14 +581,14 @@ export default function ChatPage() {
                             </div>
 
                             {/* Input */}
-                            <div className="p-4 bg-white border-t border-gray-200">
+                            <div className="p-3 md:p-4 bg-white border-t border-gray-200">
                                 {editingMessageId && (
-                                    <div className="flex items-center justify-between text-xs text-gray-500 mb-2 px-2">
+                                    <div className="flex items-center justify-between text-[10px] md:text-xs text-gray-500 mb-2 px-2">
                                         <span>Editing message...</span>
                                         <button onClick={() => { setEditingMessageId(null); setNewMessage(""); }} className="hover:text-gray-700">Cancel</button>
                                     </div>
                                 )}
-                                <form onSubmit={(e) => handleSendMessage(e)} className="flex gap-2 items-end">
+                                <form onSubmit={(e) => handleSendMessage(e)} className="flex gap-2 items-center">
                                     <input
                                         type="file"
                                         ref={fileInputRef}
@@ -605,23 +598,23 @@ export default function ChatPage() {
                                     <button
                                         type="button"
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
+                                        className="p-2 md:p-3 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all shrink-0"
                                         title="Attach file"
                                     >
                                         <Paperclip className="h-5 w-5" />
                                     </button>
-                                    <div className="flex-1 bg-gray-100 rounded-xl px-4 py-2 focus-within:ring-0 focus-within:bg-gray-100 transition-all border border-transparent focus-within:border-transparent">
+                                    <div className="flex-1 bg-gray-100 rounded-xl px-3 py-1.5 md:px-4 md:py-2 focus-within:ring-0 focus-within:bg-gray-100 transition-all border border-transparent">
                                         <input
                                             value={newMessage}
                                             onChange={e => setNewMessage(e.target.value)}
-                                            placeholder="Type your message..."
-                                            className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-sm py-1 ring-0 outline-none placeholder:text-gray-500 text-gray-900"
+                                            placeholder="Type message..."
+                                            className="w-full bg-transparent border-none focus:ring-0 focus:outline-none text-xs md:text-sm py-1 ring-0 outline-none placeholder:text-gray-500 text-gray-900"
                                         />
                                     </div>
                                     <button
                                         type="submit"
                                         disabled={!newMessage.trim()}
-                                        className="p-3 bg-brand-green-600 text-white rounded-xl hover:bg-brand-green-700 disabled:opacity-50 disabled:hover:bg-brand-green-600 shadow-md shadow-brand-green-600/20 transition-all flex items-center justify-center"
+                                        className="p-2 md:p-3 bg-brand-green-600 text-white rounded-xl hover:bg-brand-green-700 disabled:opacity-50 shadow-md shadow-brand-green-600/20 shrink-0"
                                     >
                                         {editingMessageId ? <Edit className="h-5 w-5" /> : <Send className="h-5 w-5" />}
                                     </button>
@@ -630,16 +623,16 @@ export default function ChatPage() {
                         </>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
-                            <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-                                <MessageSquare className="h-12 w-12 text-gray-300" />
+                            <div className="w-16 h-16 md:w-24 md:h-24 bg-gray-50 rounded-full flex items-center justify-center mb-4 md:mb-6">
+                                <MessageSquare className="h-8 w-8 md:h-12 md:w-12 text-gray-300" />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Welcome to Team Chat</h3>
-                            <p className="max-w-md text-center text-gray-500">
-                                Select a conversation from the sidebar or start a new chat to communicate with your team members instantly.
+                            <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-2">Welcome to Team Chat</h3>
+                            <p className="max-w-xs md:max-w-md text-center text-xs md:text-sm text-gray-500">
+                                Select a conversation to start communicating with your team members instantly.
                             </p>
                             <button
                                 onClick={openNewChatModal}
-                                className="mt-8 px-6 py-3 bg-brand-green-600 text-white rounded-xl font-medium hover:bg-brand-green-700 transition-all shadow-lg shadow-brand-green-600/20"
+                                className="mt-6 md:mt-8 px-5 py-2.5 md:px-6 md:py-3 bg-brand-green-600 text-white rounded-xl font-medium hover:bg-brand-green-700 transition-all shadow-lg"
                             >
                                 Start New Conversation
                             </button>
@@ -649,13 +642,13 @@ export default function ChatPage() {
 
                 {/* New Chat Modal */}
                 {isNewChatModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
                                 <h3 className="text-lg font-bold text-gray-900">New Message</h3>
                                 <p className="text-sm text-gray-500">Select users to start a conversation</p>
                             </div>
-                            <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            <div className="p-4 max-h-[50vh] overflow-y-auto">
                                 <div className="mb-4">
                                     <input
                                         placeholder="Search people..."
@@ -673,14 +666,14 @@ export default function ChatPage() {
                                                     type="checkbox"
                                                     checked={selectedUserIds.includes(u.id)}
                                                     onChange={() => toggleUserSelection(u.id)}
-                                                    className="w-4 h-4 text-brand-green-600 rounded border-gray-300 focus:ring-brand-green-500"
+                                                    className="w-4 h-4 text-brand-green-600 rounded border-gray-300"
                                                 />
                                                 <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center text-xs font-bold text-brand-green-700">
                                                     {u.firstName[0]}{u.lastName[0]}
                                                 </div>
-                                                <div>
-                                                    <div className="text-sm font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                                                    <div className="text-xs text-gray-500">{u.email}</div>
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-medium text-gray-900 truncate">{u.firstName} {u.lastName}</div>
+                                                    <div className="text-xs text-gray-500 truncate">{u.email}</div>
                                                 </div>
                                             </label>
                                         ))}
@@ -689,14 +682,14 @@ export default function ChatPage() {
                             <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
                                 <button
                                     onClick={() => setIsNewChatModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleCreateConversation}
                                     disabled={selectedUserIds.length === 0}
-                                    className="px-6 py-2 text-sm font-medium text-white bg-brand-green-600 hover:bg-brand-green-700 rounded-lg disabled:opacity-50 shadow-md shadow-brand-green-600/20"
+                                    className="px-6 py-2 text-sm font-medium text-white bg-brand-green-600 hover:bg-brand-green-700 rounded-lg shadow-md"
                                 >
                                     {selectedUserIds.length > 1 ? "Create Group" : "Start Chat"}
                                 </button>
@@ -707,8 +700,8 @@ export default function ChatPage() {
 
                 {/* Group Settings Modal */}
                 {isGroupSettingsOpen && activeConversation && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                                 <h3 className="text-lg font-bold text-gray-900">Group Settings</h3>
                                 <button onClick={() => setIsGroupSettingsOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
@@ -720,11 +713,11 @@ export default function ChatPage() {
                                         <input
                                             value={groupName}
                                             onChange={e => setGroupName(e.target.value)}
-                                            className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-green-500"
+                                            className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"
                                         />
                                         <button
                                             onClick={handleUpdateGroup}
-                                            className="px-4 py-2 bg-brand-green-600 text-white rounded-lg hover:bg-brand-green-700 transition-colors"
+                                            className="px-4 py-2 bg-brand-green-600 text-white rounded-lg hover:bg-brand-green-700"
                                         >
                                             Save
                                         </button>
@@ -755,23 +748,22 @@ export default function ChatPage() {
                                             <UserPlus className="h-3 w-3" /> Add Member
                                         </button>
                                     </div>
-                                    <div className="space-y-2 max-h-[40vh] overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-2 max-h-[30vh] overflow-y-auto">
                                         {activeConversation.participants.map(p => (
                                             <div key={p.user.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
                                                         {p.user.firstName[0]}
                                                     </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-900">{p.user.firstName} {p.user.lastName}</p>
-                                                        <p className="text-xs text-gray-500">{p.user.email}</p>
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-gray-900 truncate">{p.user.firstName} {p.user.lastName}</p>
+                                                        <p className="text-[10px] text-gray-400 truncate">{p.user.email}</p>
                                                     </div>
                                                 </div>
                                                 {p.user.id !== user.id && (
                                                     <button
                                                         onClick={() => handleRemoveMember(p.user.id)}
-                                                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                                        title="Remove Member"
+                                                        className="p-1 text-gray-400 hover:text-red-600"
                                                     >
                                                         <Trash className="h-4 w-4" />
                                                     </button>
@@ -796,29 +788,29 @@ export default function ChatPage() {
 
                 {/* Add Member Modal */}
                 {isAddMemberOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100">
                                 <h3 className="text-lg font-bold text-gray-900">Add Members</h3>
                             </div>
-                            <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            <div className="p-4 max-h-[50vh] overflow-y-auto">
                                 {availableUsers.length === 0 ? (
-                                    <p className="text-center text-gray-500 py-4">No other users to add.</p>
+                                    <p className="text-center text-gray-500 py-4 text-sm">No other users to add.</p>
                                 ) : (
                                     availableUsers.map(u => (
-                                        <label key={u.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                                        <label key={u.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg cursor-pointer">
                                             <input
                                                 type="checkbox"
                                                 checked={selectedUserIds.includes(u.id)}
                                                 onChange={() => toggleUserSelection(u.id)}
-                                                className="w-4 h-4 text-brand-green-600 rounded border-gray-300 focus:ring-brand-green-500"
+                                                className="w-4 h-4 text-brand-green-600 rounded border-gray-300"
                                             />
                                             <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center text-xs font-bold text-brand-green-700">
                                                 {u.firstName[0]}{u.lastName[0]}
                                             </div>
-                                            <div>
-                                                <div className="text-sm font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                                                <div className="text-xs text-gray-500">{u.email}</div>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{u.firstName} {u.lastName}</div>
+                                                <div className="text-xs text-gray-500 truncate">{u.email}</div>
                                             </div>
                                         </label>
                                     ))
@@ -827,14 +819,14 @@ export default function ChatPage() {
                             <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
                                 <button
                                     onClick={() => { setIsAddMemberOpen(false); setSelectedUserIds([]); }}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleAddMembers}
                                     disabled={selectedUserIds.length === 0}
-                                    className="px-6 py-2 text-sm font-medium text-white bg-brand-green-600 hover:bg-brand-green-700 rounded-lg disabled:opacity-50 shadow-md shadow-brand-green-600/20"
+                                    className="px-6 py-2 text-sm font-medium text-white bg-brand-green-600 hover:bg-brand-green-700 rounded-lg shadow-md"
                                 >
                                     Add Members
                                 </button>
@@ -845,27 +837,25 @@ export default function ChatPage() {
 
                 {/* Delete Confirmation Modal */}
                 {deleteConfirmOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-                            <div className="px-6 py-4 border-b border-gray-100">
-                                <h3 className="text-lg font-bold text-gray-900">Confirm Deletion</h3>
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-6">
+                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Trash className="h-6 w-6 text-red-600" />
                             </div>
-                            <div className="p-6">
-                                <p className="text-gray-700">
-                                    Are you sure you want to delete this {deleteTarget?.type === 'message' ? 'message' : 'conversation'}?
-                                    {deleteTarget?.type === 'conversation' && ' This action cannot be undone.'}
-                                </p>
-                            </div>
-                            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">Confirm Delete</h3>
+                            <p className="text-sm text-gray-500 mb-6">
+                                Are you sure you want to delete this {deleteTarget?.type}? This action cannot be undone.
+                            </p>
+                            <div className="flex gap-3">
                                 <button
                                     onClick={() => { setDeleteConfirmOpen(false); setDeleteTarget(null); }}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                                    className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     onClick={confirmDelete}
-                                    className="px-6 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md shadow-red-600/20"
+                                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-lg shadow-red-600/20"
                                 >
                                     Delete
                                 </button>
@@ -877,12 +867,12 @@ export default function ChatPage() {
                 {/* Image Viewer Modal */}
                 {imageViewerOpen && (
                     <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                        className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4"
                         onClick={() => setImageViewerOpen(false)}
                     >
                         <button
                             onClick={() => setImageViewerOpen(false)}
-                            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
                         >
                             <X className="h-6 w-6 text-white" />
                         </button>
@@ -891,14 +881,14 @@ export default function ChatPage() {
                                 e.stopPropagation();
                                 handleDownloadFile(viewerImageUrl);
                             }}
-                            className="absolute top-4 left-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                            className="absolute top-4 left-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
                         >
                             <Download className="h-6 w-6 text-white" />
                         </button>
                         <img
                             src={viewerImageUrl}
                             alt="Full size"
-                            className="max-w-full max-h-full object-contain"
+                            className="max-w-full max-h-full object-contain animate-in zoom-in-95"
                             onClick={(e) => e.stopPropagation()}
                         />
                     </div>

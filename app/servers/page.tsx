@@ -196,8 +196,8 @@ export default function ServersPage() {
                 <button onClick={openCreateModal} className="btn btn-primary">Add Server</button>
             </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-[var(--border-subtle)] overflow-hidden">
-                <table className="w-full">
+            <div className="bg-white rounded-lg shadow-sm border border-[var(--border-subtle)] overflow-x-auto">
+                <table className="min-w-full">
                     <thead className="bg-gray-50 border-b border-[var(--border-subtle)]">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Server</th>

@@ -224,8 +224,8 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg shadow-sm">
-          <table>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg shadow-sm overflow-x-auto">
+          <table className="min-w-full">
             <thead>
               <tr>
                 <th>Title</th>
