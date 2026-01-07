@@ -613,8 +613,8 @@ export default function ProjectDetailsPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+        <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+          <nav className="-mb-px flex space-x-8 min-w-max px-2" aria-label="Tabs">
             {visibleTabs.includes("details") && (
               <button
                 onClick={() => setActiveTab("details")}

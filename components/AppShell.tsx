@@ -3,9 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { authService } from "@/lib/auth";
 import { NotificationBell } from "./NotificationBell";
+import { Menu, X } from "lucide-react";
 
 type NavItem = {
   label: string;
@@ -90,11 +91,12 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
 
   const handleLogout = React.useCallback(() => {
-    setMenuOpen(false);
+    setProfileMenuOpen(false);
     authService.logout();
     onLogout?.();
     router.push("/login");
@@ -103,44 +105,67 @@ export function AppShell({
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
+        setProfileMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
   return (
-    <div className="h-screen flex bg-[var(--bg-body)] text-[var(--text-primary)]">
-      <aside className="w-68 bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] flex flex-col shadow-sm sticky top-0 h-screen">
-        <div className="h-16 border-b border-[var(--border-subtle)] flex items-center px-6 font-semibold text-[var(--text-primary)] tracking-tight">
-          <div className="h-10 w-10 rounded-lg overflow-hidden bg-white mr-3 border border-brand-green-200 shadow-sm">
-            <Image
-              src="/img/logo.png"
-              alt="RMSoft logo"
-              width={40}
-              height={40}
-              className="h-full w-full object-contain"
-              priority
-            />
+    <div className="h-screen flex bg-[var(--bg-body)] text-[var(--text-primary)] overflow-hidden">
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[var(--bg-surface)] border-r border-[var(--border-subtle)] flex flex-col shadow-xl transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:shadow-none ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+      >
+        <div className="h-16 border-b border-[var(--border-subtle)] flex items-center px-6 font-semibold text-[var(--text-primary)] tracking-tight justify-between">
+          <div className="flex items-center">
+            <div className="h-8 w-8 rounded-lg overflow-hidden bg-white mr-3 border border-brand-green-200 shadow-sm shrink-0">
+              <Image
+                src="/img/logo.png"
+                alt="RMSoft logo"
+                width={32}
+                height={32}
+                className="h-full w-full object-contain"
+                priority
+              />
+            </div>
+            <div className="leading-tight">
+              <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide">Management</div>
+              <div className="text-sm text-[var(--text-primary)] whitespace-nowrap">Info System</div>
+            </div>
           </div>
-          <div className="leading-tight">
-            <div className="text-xs text-[var(--text-secondary)] uppercase tracking-wide">Management</div>
-            <div className="text-sm text-[var(--text-primary)]">Information System</div>
-          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden text-gray-500 hover:text-gray-700"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <nav className="flex-1 py-5">
-          <ul className="space-y-1.5">
+
+        <nav className="flex-1 py-5 overflow-y-auto custom-scrollbar">
+          <ul className="space-y-1 px-3">
             {navItems
               .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
               .map((item) => {
-                // More precise active state checking
-                // For exact match or child routes, but not if a more specific route exists
                 let active = false;
                 if (pathname === item.href) {
                   active = true;
                 } else if (pathname?.startsWith(`${item.href}/`)) {
-                  // Check if there's a more specific route that matches
                   const moreSpecificRoute = navItems.find(
                     navItem => navItem.href !== item.href && pathname?.startsWith(navItem.href)
                   );
@@ -151,12 +176,12 @@ export function AppShell({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className={`mx-3 flex items-center rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors duration-150 ${active
-                        ? "bg-brand-green-50 text-brand-green-700 border border-brand-green-200 shadow-inner shadow-brand-green-100"
-                        : "text-[var(--text-secondary)] hover:bg-gray-50"
+                      className={`flex items-center rounded-lg px-3.5 py-2.5 text-sm font-medium transition-all duration-200 ${active
+                        ? "bg-brand-green-50 text-brand-green-700 shadow-sm ring-1 ring-brand-green-200"
+                        : "text-[var(--text-secondary)] hover:bg-gray-50 hover:text-gray-900"
                         }`}
                     >
-                      <span className="mr-3">
+                      <span className={`mr-3 ${active ? "text-brand-green-600" : "text-gray-400 group-hover:text-gray-500"}`}>
                         {item.icon}
                       </span>
                       {item.label}
@@ -168,66 +193,94 @@ export function AppShell({
         </nav>
       </aside>
 
-      <div className="flex-1 flex flex-col min-h-screen">
-        <header className="h-16 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 flex items-center justify-between sticky top-0 z-30 backdrop-blur-sm bg-[color-mix(in_srgb,var(--bg-surface) 85%,transparent)]">
-          <div>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className="text-sm text-[var(--text-secondary)]">{subtitle}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-3 pl-3 border-l border-[var(--border-subtle)] relative" ref={menuRef}>
-            <NotificationBell />
+      <div className="flex-1 flex flex-col min-h-screen w-full relative">
+        <header className="h-16 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 backdrop-blur-md bg-white/80 supports-[backdrop-filter]:bg-white/60">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => setMenuOpen((o) => !o)}
-              className="flex items-center gap-3 rounded-full px-2 py-1 hover:bg-gray-100 transition"
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Open menu"
             >
-              <div className="text-right leading-tight hidden sm:block">
+              <Menu className="w-6 h-6" />
+            </button>
+
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] truncate">
+                {title}
+              </h1>
+              {subtitle && (
+                <p className="hidden sm:block text-sm text-[var(--text-secondary)] truncate">{subtitle}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3 pl-3 relative" ref={menuRef}>
+            <NotificationBell />
+            <div className="h-8 w-px bg-gray-200 mx-1 hidden sm:block" />
+            <button
+              onClick={() => setProfileMenuOpen((o) => !o)}
+              className="flex items-center gap-3 rounded-full py-1 hover:bg-gray-50 transition-all pl-1 pr-2 border border-transparent hover:border-gray-200"
+            >
+              <div className="text-right leading-tight hidden lg:block">
                 <div className="text-sm font-semibold text-[var(--text-primary)]">{userName || "User"}</div>
-                <div className="text-xs text-[var(--text-secondary)]">Profile</div>
+                <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide">{userRole || "Member"}</div>
               </div>
-              <div className="h-10 w-10 rounded-full bg-brand-green-100 flex items-center justify-center text-brand-green-700 font-semibold shadow-inner shadow-brand-green-200/60 border border-brand-green-200">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand-green-100 to-brand-green-200 flex items-center justify-center text-brand-green-800 font-bold shadow-sm ring-2 ring-white">
                 {userName ? userName[0]?.toUpperCase() : "U"}
               </div>
             </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-12 w-56 bg-white border border-[var(--border-subtle)] rounded-lg shadow-lg py-2 z-40">
-                <Link
-                  href="/users/profile"
-                  className="block px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-gray-50"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  View profile
-                </Link>
-                <Link
-                  href="/users/update-info"
-                  className="block px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-gray-50"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Update info
-                </Link>
-                <Link
-                  href="/users/change-password"
-                  className="block px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-gray-50"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Change password
-                </Link>
+
+            {profileMenuOpen && (
+              <div className="absolute right-0 top-14 w-60 bg-white border border-[var(--border-subtle)] rounded-xl shadow-xl py-2 z-40 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                <div className="px-4 py-3 border-b border-gray-100 lg:hidden">
+                  <p className="text-sm font-semibold text-gray-900">{userName || "User"}</p>
+                  <p className="text-xs text-gray-500">{userRole || "Member"}</p>
+                </div>
+
+                <div className="py-1">
+                  <Link
+                    href="/users/profile"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-brand-green-700"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    View Profile
+                  </Link>
+                  <Link
+                    href="/users/update-info"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-brand-green-700"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    Update Info
+                  </Link>
+                  <Link
+                    href="/users/change-password"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-brand-green-700"
+                    onClick={() => setProfileMenuOpen(false)}
+                  >
+                    Change Password
+                  </Link>
+                </div>
+
                 <div className="border-t border-[var(--border-subtle)] my-1" />
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-brand-green-900 font-semibold hover:bg-brand-green-50"
-                >
-                  Logout
-                </button>
+
+                <div className="py-1">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 font-medium hover:bg-red-50 flex items-center gap-2"
+                  >
+                    Sign out
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </header>
 
-        <main className="flex-1 px-6 py-6 overflow-auto">{children}</main>
+        <main className="flex-1 px-4 sm:px-6 py-6 overflow-y-auto custom-scrollbar bg-[var(--bg-body)]">
+          <div className="mx-auto max-w-7xl animate-in fade-in duration-300">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );
