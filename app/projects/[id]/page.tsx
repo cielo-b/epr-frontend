@@ -9,9 +9,25 @@ import { UserRole, canAssignDevelopers, canCreateProjects } from "@/lib/roles";
 import { useToast } from "@/components/ToastProvider";
 import { AppShell } from "@/components/AppShell";
 import { Skeleton, CardSkeleton } from "@/components/Skeleton"; // Import Skeletons
-import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check, Search, ChevronDown } from "lucide-react";
+import { Upload, X, File, Plus, Trash2, Download, Eye, Clock, MessageSquare, Send, Folder, ChevronRight, FileText, Image as ImageIcon, Film, Music, Box, LayoutGrid, List, Archive, Check, Search, ChevronDown, Layers, Database, Smartphone, Globe, Cloud } from "lucide-react";
 
 import TaskBoard from "@/components/tasks/TaskBoard";
+
+type ProjectComponent = {
+  id: string;
+  name: string;
+  type: "FRONTEND" | "BACKEND" | "MOBILE" | "DATABASE" | "OTHER";
+  description?: string;
+  repositoryUrl?: string;
+  productionUrl?: string;
+  stagingUrl?: string;
+  serverPort?: number;
+  healthCheckEndpoint?: string;
+  status: string;
+  techStack?: string[];
+  createdAt: string;
+  developers?: { id: string; firstName: string; lastName: string }[];
+};
 
 type Project = {
   id: string;
@@ -96,13 +112,66 @@ export default function ProjectDetailsPage() {
   });
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [showArchived, setShowArchived] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "comments" | "tasks" | "documents">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "timeline" | "comments" | "tasks" | "documents" | "architecture">("details");
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [visibleLogsCount, setVisibleLogsCount] = useState(10);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [projectComponents, setProjectComponents] = useState<ProjectComponent[]>([]);
+  const [isComponentModalOpen, setIsComponentModalOpen] = useState(false);
+  const [activeComponent, setActiveComponent] = useState<ProjectComponent | null>(null);
+  const [assignDevModalOpen, setAssignDevModalOpen] = useState(false);
+  const [componentForm, setComponentForm] = useState({
+    name: "",
+    type: "OTHER",
+    description: "",
+    repositoryUrl: "",
+    productionUrl: "",
+    stagingUrl: "",
+    serverPort: "",
+    healthCheckEndpoint: "",
+    techStack: "", // Comma separated string for input
+    status: "UNKNOWN",
+  });
   const [uploading, setUploading] = useState(false);
+
+  // ... (rest of states)
+
+  // ... (useEffect for auth)
+
+  const assignComponentDev = async (componentId: string, developerId: string) => {
+    try {
+      await api.post(`/project-components/${componentId}/developers/${developerId}`);
+      addToast("Developer assigned to component.");
+      setAssignDevModalOpen(false);
+      loadComponents(); // Reload to see update
+      loadLogs();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || "Failed to assign developer.";
+      addToast(Array.isArray(message) ? message.join(", ") : message, "error");
+    }
+  };
+
+  const removeComponentDev = async (componentId: string, developerId: string) => {
+    // Confirmation handled by modal
+    try {
+      await api.delete(`/project-components/${componentId}/developers/${developerId}`);
+      addToast("Developer removed from component.");
+      loadComponents();
+      loadLogs();
+      if (activeComponent) {
+        // If viewing modal, refresh it or close if needed. For now let's just reload components.
+        // actually assign modal uses project.assignments filter, so it might not need update?
+        // But component list needs update.
+      }
+    } catch (error: any) {
+      addToast("Failed to remove developer.", "error");
+    }
+  };
+
+
+
   const [docFiles, setDocFiles] = useState<FileList | null>(null);
   const [docDescription, setDocDescription] = useState("");
   const [docConfidentiality, setDocConfidentiality] = useState<"CONFIDENTIAL" | "PUBLIC">("PUBLIC");
@@ -112,6 +181,31 @@ export default function ProjectDetailsPage() {
     targetId: string | null;
     label: string;
   }>({ type: null, targetId: null, label: "" });
+
+  const [genericConfirmModal, setGenericConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: "", message: "", onConfirm: () => { } });
+
+  const confirmDeleteComponent = (id: string) => {
+    setGenericConfirmModal({
+      isOpen: true,
+      title: "Delete Component",
+      message: "Are you sure you want to delete this component? This action cannot be undone.",
+      onConfirm: () => deleteComponent(id)
+    });
+  };
+
+  const confirmRemoveComponentDev = (componentId: string, developerId: string) => {
+    setGenericConfirmModal({
+      isOpen: true,
+      title: "Remove Developer",
+      message: "Are you sure you want to remove this developer from the component?",
+      onConfirm: () => removeComponentDev(componentId, developerId)
+    });
+  };
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -177,11 +271,22 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  const loadComponents = async () => {
+    try {
+      const response = await api.get(`/project-components/project/${params.id}`);
+      setProjectComponents(response.data || []);
+    } catch (error) {
+      addToast("Failed to load project components.", "error");
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "timeline") {
       loadLogs();
     } else if (activeTab === "comments") {
       loadComments();
+    } else if (activeTab === "architecture") {
+      loadComponents();
     }
   }, [activeTab, params.id]);
 
@@ -203,6 +308,85 @@ export default function ProjectDetailsPage() {
       addToast("Failed to load comments.", "error");
     } finally {
       setCommentsLoading(false);
+    }
+  };
+
+  const createComponent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        name: componentForm.name,
+        type: componentForm.type,
+        description: componentForm.description,
+        repositoryUrl: componentForm.repositoryUrl,
+        productionUrl: componentForm.productionUrl,
+        stagingUrl: componentForm.stagingUrl,
+        serverPort: componentForm.serverPort ? parseInt(componentForm.serverPort as any) : undefined,
+        healthCheckEndpoint: componentForm.healthCheckEndpoint,
+        techStack: typeof componentForm.techStack === 'string' ? componentForm.techStack.split(",").map((s: string) => s.trim()).filter((s: string) => s) : [],
+        status: componentForm.status, // Add status to payload
+      };
+
+      if (activeComponent) {
+        await api.patch(`/project-components/${activeComponent.id}`, payload);
+        addToast("Component updated successfully.");
+      } else {
+        await api.post(`/project-components/${params.id}`, payload);
+        addToast("Component added successfully.");
+      }
+
+      setIsComponentModalOpen(false);
+      setActiveComponent(null); // Reset active component
+      setComponentForm({
+        name: "",
+        type: "OTHER",
+        description: "",
+        repositoryUrl: "",
+        productionUrl: "",
+        stagingUrl: "",
+        serverPort: "",
+        healthCheckEndpoint: "",
+        techStack: "",
+        status: "UNKNOWN",
+      });
+      loadComponents();
+      loadLogs();
+    } catch (error: any) {
+      const message = error?.response?.data?.message || `Failed to ${activeComponent ? 'update' : 'add'} component.`;
+      addToast(Array.isArray(message) ? message.join(", ") : message, "error");
+    }
+  };
+
+  const openEditComponentModal = (comp: ProjectComponent) => {
+    setActiveComponent(comp);
+    setComponentForm({
+      name: comp.name,
+      type: comp.type,
+      description: comp.description || "",
+      repositoryUrl: comp.repositoryUrl || "",
+      productionUrl: comp.productionUrl || "",
+      stagingUrl: comp.stagingUrl || "",
+      serverPort: comp.serverPort ? String(comp.serverPort) : "",
+      healthCheckEndpoint: comp.healthCheckEndpoint || "",
+      techStack: comp.techStack ? comp.techStack.join(", ") : "",
+      status: comp.status,
+    });
+    setIsComponentModalOpen(true);
+  };
+
+  const deleteComponent = async (id: string) => {
+    // Confirmation handled by modal
+    try {
+      await api.delete(`/project-components/${id}`);
+      addToast("Component deleted.");
+      loadComponents();
+      loadLogs();
+      if (activeComponent && activeComponent.id === id) {
+        setIsComponentModalOpen(false);
+        setActiveComponent(null);
+      }
+    } catch (error) {
+      addToast("Failed to delete component.", "error");
     }
   };
 
@@ -506,7 +690,7 @@ export default function ProjectDetailsPage() {
   }, [user, project]);
 
   const visibleTabs = useMemo(() => {
-    const allTabs = ["details", "tasks", "timeline", "comments", "documents"] as const;
+    const allTabs = ["details", "tasks", "timeline", "comments", "documents", "architecture"] as const;
     if (!isVisitor) return allTabs;
 
     if (projectPermission?.constraints?.tabs) {
@@ -672,6 +856,17 @@ export default function ProjectDetailsPage() {
                   } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
               >
                 Documents
+              </button>
+            )}
+            {visibleTabs.includes("architecture") && (
+              <button
+                onClick={() => setActiveTab("architecture")}
+                className={`${activeTab === "architecture"
+                  ? "border-brand-green-500 text-brand-green-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+              >
+                Architecture
               </button>
             )}
           </nav>
@@ -1352,6 +1547,241 @@ export default function ProjectDetailsPage() {
             </div>
           )}
 
+          {activeTab === "architecture" && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-900">System Architecture & Components</h2>
+                {canEdit && (
+                  <button
+                    onClick={() => setIsComponentModalOpen(true)}
+                    className="btn btn-primary flex items-center gap-2"
+                  >
+                    <Plus className="h-4 w-4" /> Add Component
+                  </button>
+                )}
+              </div>
+
+              {projectComponents.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200 shadow-sm">
+                  <Layers className="mx-auto h-12 w-12 text-gray-300" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No components defined</h3>
+                  <p className="mt-1 text-sm text-gray-500">Break down your project into manageble modules.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {projectComponents.map(comp => (
+                    <div key={comp.id} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all p-5 flex flex-col group relative">
+                      <div className="flex items-start gap-3 mb-4">
+                        <div className={`p-2 rounded-lg 
+                             ${comp.type === 'FRONTEND' ? 'bg-blue-100 text-blue-600' :
+                            comp.type === 'BACKEND' ? 'bg-indigo-100 text-indigo-600' :
+                              comp.type === 'MOBILE' ? 'bg-purple-100 text-purple-600' :
+                                comp.type === 'DATABASE' ? 'bg-orange-100 text-orange-600' :
+                                  'bg-gray-100 text-gray-600'}`}>
+                          {comp.type === 'FRONTEND' && <Globe className="h-5 w-5" />}
+                          {comp.type === 'BACKEND' && <Cloud className="h-5 w-5" />}
+                          {comp.type === 'MOBILE' && <Smartphone className="h-5 w-5" />}
+                          {comp.type === 'DATABASE' && <Database className="h-5 w-5" />}
+                          {comp.type === 'OTHER' && <Box className="h-5 w-5" />}
+                        </div>
+                        <div className={`text-xs font-bold px-2 py-1 rounded-full self-center ${comp.status === 'UP' ? 'bg-green-100 text-green-700' :
+                          comp.status === 'DOWN' ? 'bg-red-100 text-red-700' :
+                            comp.status === 'MAINTENANCE' ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-gray-100 text-gray-600'}`}>
+                          {comp.status || 'UNKNOWN'}
+                        </div>
+                      </div>
+
+                      <h3 className="text-lg font-bold text-gray-900 mb-1">{comp.name}</h3>
+                      <p className="text-sm text-gray-500 line-clamp-2 mb-4 flex-1">{comp.description}</p>
+
+                      {comp.techStack && comp.techStack.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {comp.techStack.map(stack => (
+                            <span key={stack} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded font-medium border border-gray-200">{stack}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-2 mt-auto text-sm">
+                        {comp.repositoryUrl && (
+                          <a href={comp.repositoryUrl} target="_blank" className="flex items-center gap-2 text-gray-600 hover:text-brand-green-600 transition-colors">
+                            <Box className="h-4 w-4" /> Repository
+                          </a>
+                        )}
+                        {(comp.productionUrl || comp.stagingUrl) && (
+                          <a href={comp.productionUrl || comp.stagingUrl} target="_blank" className="flex items-center gap-2 text-gray-600 hover:text-brand-green-600 transition-colors">
+                            <Globe className="h-4 w-4" /> {comp.productionUrl ? 'Live App' : 'Staging'}
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Assigned Developers */}
+                      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-slate-800">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</span>
+                          {canEdit && (
+                            <button
+                              onClick={() => { setActiveComponent(comp); setAssignDevModalOpen(true); }}
+                              className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                            >
+                              <Plus className="h-3 w-3" /> Add
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {comp.developers && comp.developers.length > 0 ? (
+                            comp.developers.map(dev => (
+                              <div key={dev.id} className="group/dev relative">
+                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-green-400 to-brand-green-600 flex items-center justify-center text-xs font-bold text-white shadow-sm ring-2 ring-white dark:ring-slate-900 cursor-default" title={`${dev.firstName} ${dev.lastName}`}>
+                                  {dev.firstName[0]}{dev.lastName[0]}
+                                </div>
+                                {canEdit && (
+                                  <button
+                                    onClick={() => confirmRemoveComponentDev(comp.id, dev.id)}
+                                    className="absolute -top-1 -right-1 bg-red-100 text-red-600 rounded-full p-0.5 opacity-0 group-hover/dev:opacity-100 transition-opacity hover:bg-red-200 shadow-sm"
+                                    title="Remove developer"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">No developers assigned</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {canEdit && (
+                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => openEditComponentModal(comp)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                            title="Edit component"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => confirmDeleteComponent(comp.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50 transition-colors"
+                            title="Delete component"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ... (Assign Developer Modal) */}
+
+          {/* Component Modal */}
+          {isComponentModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                  <h3 className="text-lg font-bold text-gray-900">{activeComponent ? 'Edit Component' : 'Add New Component'}</h3>
+                  <button onClick={() => { setIsComponentModalOpen(false); setActiveComponent(null); }} className="text-gray-400 hover:text-gray-600">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <form onSubmit={createComponent} className="p-6 space-y-4">
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                      <input
+                        required
+                        value={componentForm.name}
+                        onChange={e => setComponentForm({ ...componentForm, name: e.target.value })}
+                        className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                        placeholder="e.g. Admin Panel"
+                      />
+                    </div>
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                      <select
+                        value={componentForm.type}
+                        onChange={e => setComponentForm({ ...componentForm, type: e.target.value })}
+                        className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                      >
+                        <option value="FRONTEND">Frontend</option>
+                        <option value="BACKEND">Backend</option>
+                        <option value="MOBILE">Mobile App</option>
+                        <option value="DATABASE">Database</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={componentForm.status}
+                      onChange={e => setComponentForm({ ...componentForm, status: e.target.value })}
+                      className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                    >
+                      <option value="UNKNOWN">UNKNOWN</option>
+                      <option value="UP">UP</option>
+                      <option value="DOWN">DOWN</option>
+                      <option value="MAINTENANCE">MAINTENANCE</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={componentForm.description}
+                      onChange={e => setComponentForm({ ...componentForm, description: e.target.value })}
+                      className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm h-20 resize-none px-3 py-2"
+                      placeholder="Briefly describe this module..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tech Stack (comma separated)</label>
+                      <input
+                        value={componentForm.techStack}
+                        onChange={e => setComponentForm({ ...componentForm, techStack: e.target.value })}
+                        className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                        placeholder="React, Tailwind, Next.js"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Repo URL</label>
+                      <input
+                        value={componentForm.repositoryUrl}
+                        onChange={e => setComponentForm({ ...componentForm, repositoryUrl: e.target.value })}
+                        className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                        placeholder="https://github.com/..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Live / API URL</label>
+                      <input
+                        value={componentForm.productionUrl}
+                        onChange={e => setComponentForm({ ...componentForm, productionUrl: e.target.value })}
+                        className="w-full rounded-lg border-gray-300 focus:border-brand-green-500 focus:ring-brand-green-500 text-sm px-3 py-2"
+                        placeholder="https://app.example.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-end gap-3">
+                    <button type="button" onClick={() => setIsComponentModalOpen(false)} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg">Cancel</button>
+                    <button type="submit" className="px-6 py-2 bg-brand-green-600 text-white text-sm font-medium rounded-lg hover:bg-brand-green-700 shadow-md shadow-brand-green-600/20">Add Component</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {
             activeTab === "timeline" && (
               <div className="bg-white shadow rounded-lg p-6">
@@ -1723,6 +2153,89 @@ export default function ProjectDetailsPage() {
           </div>
         )
       }
+
+      {/* Generic Confirmation Modal */}
+      {genericConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">{genericConfirmModal.title}</h3>
+              <p className="text-sm text-gray-500 mb-6">{genericConfirmModal.message}</p>
+
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => setGenericConfirmModal({ ...genericConfirmModal, isOpen: false })}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    genericConfirmModal.onConfirm();
+                    setGenericConfirmModal({ ...genericConfirmModal, isOpen: false });
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-lg shadow-red-600/20 transition-all hover:scale-105"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Developer Modal */}
+      {assignDevModalOpen && activeComponent && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+              <h3 className="text-sm font-bold text-gray-900">Assign to {activeComponent.name}</h3>
+              <button onClick={() => setAssignDevModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-2 max-h-80 overflow-y-auto">
+              {project?.assignments?.filter(assignment => !activeComponent.developers?.some(d => d.id === assignment.developer.id)).length === 0 ? (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  All project developers are already assigned.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {project?.assignments?.filter(assignment => !activeComponent.developers?.some(d => d.id === assignment.developer.id)).map(assignment => (
+                    <button
+                      key={assignment.developer.id}
+                      onClick={() => assignComponentDev(activeComponent.id, assignment.developer.id)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 rounded-lg flex items-center justify-between group transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-brand-green-100 flex items-center justify-center text-xs font-bold text-brand-green-700">
+                          {assignment.developer.firstName[0]}{assignment.developer.lastName[0]}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{assignment.developer.firstName} {assignment.developer.lastName}</div>
+                          <div className="text-xs text-gray-500">{assignment.role || 'Developer'}</div>
+                        </div>
+                      </div>
+                      <Plus className="h-4 w-4 text-gray-300 group-hover:text-brand-green-600" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Component Modal */}
+      {isComponentModalOpen && (
+        // ... existing component modal code
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          {/* ... content */}
+        </div>
+      )}
     </AppShell >
   );
 }
