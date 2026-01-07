@@ -38,3 +38,4 @@ next-env.d.ts
 
 .env.base64
 .env
+.env.push-notifications

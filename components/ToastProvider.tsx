@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useState } from "react";
 
-type ToastType = "success" | "error";
+type ToastType = "success" | "error" | "info" | "warning";
 
 interface Toast {
   id: number;
@@ -33,6 +33,21 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
     []
   );
 
+  const getToastColor = (type: ToastType) => {
+    switch (type) {
+      case "error":
+        return "bg-brand-red-600";
+      case "success":
+        return "bg-brand-green-600";
+      case "info":
+        return "bg-blue-600";
+      case "warning":
+        return "bg-yellow-600";
+      default:
+        return "bg-brand-green-600";
+    }
+  };
+
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
@@ -40,9 +55,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`max-w-sm rounded-md px-4 py-3 shadow-md text-sm text-white ${
-              toast.type === "error" ? "bg-brand-red-600" : "bg-brand-green-600"
-            }`}
+            className={`max-w-sm rounded-md px-4 py-3 shadow-md text-sm text-white ${getToastColor(toast.type)}`}
           >
             {toast.message}
           </div>
