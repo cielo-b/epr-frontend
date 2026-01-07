@@ -2,7 +2,7 @@ import api from './api';
 
 // VAPID public key - this should match the one in your backend .env
 // You'll need to generate VAPID keys and add them to your backend .env
-const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'BLziuP3-Qq-OIA2DMogIqxfSfWbELBkB372hLL_57NnkRLg3QtaEVwhrIKYsPWxRNhnR9YKIuoe_k-Xd5B5xDD4';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);

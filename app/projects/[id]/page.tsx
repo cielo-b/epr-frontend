@@ -2198,9 +2198,13 @@ export default function ProjectDetailsPage() {
               </button>
             </div>
             <div className="p-2 max-h-80 overflow-y-auto">
-              {project?.assignments?.filter(assignment => !activeComponent.developers?.some(d => d.id === assignment.developer.id)).length === 0 ? (
+              {(!project?.assignments || project.assignments.length === 0) ? (
                 <div className="text-center py-8 text-sm text-gray-500">
-                  All project developers are already assigned.
+                  No developers are assigned to this project yet. Add developers to the project first.
+                </div>
+              ) : project.assignments.filter(assignment => !activeComponent.developers?.some(d => d.id === assignment.developer.id)).length === 0 ? (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  All project developers are already assigned to this component.
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -2229,13 +2233,7 @@ export default function ProjectDetailsPage() {
         </div>
       )}
 
-      {/* Component Modal */}
-      {isComponentModalOpen && (
-        // ... existing component modal code
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          {/* ... content */}
-        </div>
-      )}
+
     </AppShell >
   );
 }
