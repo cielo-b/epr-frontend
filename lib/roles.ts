@@ -1,52 +1,50 @@
 export enum UserRole {
-  BOSS = "BOSS",
   SUPERADMIN = "SUPERADMIN",
-  SECRETARY = "SECRETARY",
-  PROJECT_MANAGER = "PROJECT_MANAGER",
-  DEVOPS = "DEVOPS",
-  DEVELOPER = "DEVELOPER",
-  VISITOR = "VISITOR",
-  OTHER = "OTHER",
+  CHURCH_PRESIDENT = "CHURCH_PRESIDENT",
+  CHURCH_VICE_PRESIDENT = "CHURCH_VICE_PRESIDENT",
+  CHURCH_SECRETARY = "CHURCH_SECRETARY",
+  CHURCH_ACCOUNTANT = "CHURCH_ACCOUNTANT",
+  CHURCH_WORKER = "CHURCH_WORKER",
+  PRESBYTERY_MODERATOR = "PRESBYTERY_MODERATOR",
+  PRESBYTERY_VICE_MODERATOR = "PRESBYTERY_VICE_MODERATOR",
+  PRESBYTERY_SECRETARY = "PRESBYTERY_SECRETARY",
+  PRESBYTERY_ACCOUNTANT = "PRESBYTERY_ACCOUNTANT",
+  PRESBYTERY_WORKER = "PRESBYTERY_WORKER",
+  PARISH_PASTOR = "PARISH_PASTOR",
+  PARISH_VICE_PASTOR = "PARISH_VICE_PASTOR",
+  PARISH_SECRETARY = "PARISH_SECRETARY",
+  PARISH_ACCOUNTANT = "PARISH_ACCOUNTANT",
+  PARISH_WORKER = "PARISH_WORKER",
+  COMMUNITY_LEADER = "COMMUNITY_LEADER",
+  COMMUNITY_ASSISTANT = "COMMUNITY_ASSISTANT",
+  REVEREND = "REVEREND",
+  DEACON = "DEACON",
+  EVANGELIST = "EVANGELIST",
+  MEMBER = "MEMBER",
 }
 
 export const canCreateUsers = (role: string): boolean => {
-  return role === UserRole.BOSS || role === UserRole.SUPERADMIN || role === UserRole.PROJECT_MANAGER;
-};
-
-export const canCreateProjects = (role: string): boolean => {
-  return [UserRole.PROJECT_MANAGER, UserRole.BOSS, UserRole.SUPERADMIN].includes(
-    role as UserRole,
-  );
-};
-
-export const canAssignDevelopers = (role: string): boolean => {
-  return [UserRole.PROJECT_MANAGER, UserRole.BOSS, UserRole.SUPERADMIN].includes(
-    role as UserRole,
-  );
-};
-
-export const canOverseeAllProjects = (role: string): boolean => {
-  return [UserRole.BOSS, UserRole.DEVOPS, UserRole.SUPERADMIN, UserRole.PROJECT_MANAGER].includes(
-    role as UserRole
-  );
-};
-
-export const canManageAnnouncements = (role: string): boolean => {
-  return [UserRole.SECRETARY, UserRole.PROJECT_MANAGER, UserRole.BOSS, UserRole.SUPERADMIN].includes(
-    role as UserRole
-  );
+  return [UserRole.SUPERADMIN, UserRole.CHURCH_PRESIDENT, UserRole.CHURCH_SECRETARY].includes(role as UserRole);
 };
 
 export const getRoleDisplayName = (role: string): string => {
   const roleMap: Record<string, string> = {
-    BOSS: "Boss",
     SUPERADMIN: "Super Admin",
-    SECRETARY: "Secretary",
-    PROJECT_MANAGER: "Project Manager",
-    DEVOPS: "DevOps",
-    DEVELOPER: "Developer",
-    VISITOR: "Visitor",
-    OTHER: "Other",
+    CHURCH_PRESIDENT: "Church President",
+    CHURCH_VICE_PRESIDENT: "Vice President",
+    CHURCH_SECRETARY: "General Secretary",
+    CHURCH_ACCOUNTANT: "General Accountant",
+    CHURCH_WORKER: "Synod Worker",
+    PRESBYTERY_MODERATOR: "Presbytery Moderator",
+    PRESBYTERY_SECRETARY: "Presbytery Secretary",
+    PRESBYTERY_ACCOUNTANT: "Presbytery Accountant",
+    PRESBYTERY_WORKER: "Presbytery Worker",
+    PARISH_PASTOR: "Parish Pastor",
+    PARISH_SECRETARY: "Parish Secretary",
+    PARISH_ACCOUNTANT: "Parish Accountant",
+    PARISH_WORKER: "Parish Worker",
+    COMMUNITY_LEADER: "Community Leader",
+    MEMBER: "Member",
   };
   return roleMap[role] || role;
 };

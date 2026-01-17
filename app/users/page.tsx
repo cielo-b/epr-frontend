@@ -28,10 +28,12 @@ export default function UsersPage() {
     firstName: "",
     lastName: "",
     email: "",
-    role: UserRole.DEVELOPER,
+    role: UserRole.MEMBER,
     isActive: true,
     password: "",
+    customRoleId: "",
   });
+  const [customRoles, setCustomRoles] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -51,14 +53,19 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-      const response = await api.get("/users");
-      setUsers(response.data);
+      const [usersRes, rolesRes] = await Promise.all([
+        api.get("/users"),
+        api.get("/roles")
+      ]);
+      setUsers(usersRes.data);
+      setCustomRoles(rolesRes.data);
     } catch (error) {
       console.error("Failed to load users:", error);
     } finally {
       setLoading(false);
     }
   };
+
 
   const roleOptions = useMemo(() => Object.values(UserRole), []);
 
@@ -68,9 +75,10 @@ export default function UsersPage() {
       firstName: u.firstName || "",
       lastName: u.lastName || "",
       email: u.email || "",
-      role: u.role || UserRole.DEVELOPER,
+      role: u.role || UserRole.MEMBER,
       isActive: u.isActive ?? true,
       password: "",
+      customRoleId: u.customRoleId || "",
     });
     setActiveTab(u.role === UserRole.VISITOR ? "permissions" : "details");
     setModalOpen(true);
@@ -82,9 +90,10 @@ export default function UsersPage() {
       firstName: "",
       lastName: "",
       email: "",
-      role: UserRole.DEVELOPER,
+      role: UserRole.MEMBER,
       isActive: true,
       password: "",
+      customRoleId: "",
     });
     setActiveTab("details");
     setModalOpen(true);
@@ -98,9 +107,10 @@ export default function UsersPage() {
       firstName: "",
       lastName: "",
       email: "",
-      role: UserRole.DEVELOPER,
+      role: UserRole.MEMBER,
       isActive: true,
       password: "",
+      customRoleId: "",
     });
   };
 
@@ -117,7 +127,6 @@ export default function UsersPage() {
   };
 
   const saveUser = async () => {
-    // Password is now optional. If blank, invitation email is sent.
     setSaving(true);
     try {
       const payload: any = {
@@ -126,31 +135,23 @@ export default function UsersPage() {
         email: editForm.email,
         role: editForm.role,
         isActive: editForm.isActive,
+        customRoleId: editForm.customRoleId || null,
       };
       if (editForm.password) {
         payload.password = editForm.password;
       }
+
       if (selectedUser) {
         await api.patch(`/users/${selectedUser.id}`, payload);
-        addToast("User updated successfully");
+        addToast("User updated successfully", "success");
       } else {
-        const response = await api.post(`/users`, payload);
-        addToast("User created successfully");
-
-        // If VISITOR, open permissions tab
-        if (editForm.role === UserRole.VISITOR) {
-          setSelectedUser(response.data);
-          setActiveTab("permissions");
-          setModalOpen(true);
-        }
+        await api.post(`/users`, payload);
+        addToast("User created successfully", "success");
       }
       await loadUsers();
-      if (editForm.role !== UserRole.VISITOR) {
-        closeModal();
-      }
+      closeModal();
     } catch (error: any) {
-      const message =
-        error?.response?.data?.message || "Failed to save user. Please try again.";
+      const message = error?.response?.data?.message || "Failed to save user";
       addToast(Array.isArray(message) ? message.join(", ") : message, "error");
     } finally {
       setSaving(false);
@@ -243,8 +244,8 @@ export default function UsersPage() {
                   <td className="text-sm text-gray-700">{u.email}</td>
                   <td>
                     <span className="badge badge-info">{getRoleDisplayName(u.role)}</span>
-                    {u.role === UserRole.VISITOR && (
-                      <span className="ml-2 text-xs text-gray-500">(Custom Access)</span>
+                    {u.customRole && (
+                      <span className="ml-2 text-xs text-blue-600 font-bold uppercase tracking-widest">({u.customRole.name})</span>
                     )}
                   </td>
                   <td className="text-sm text-gray-700">
@@ -402,7 +403,7 @@ export default function UsersPage() {
                         />
                       </div>
                       <div>
-                        <label className="label">Role</label>
+                        <label className="label">Base Role</label>
                         <select
                           name="role"
                           value={editForm.role}
@@ -415,6 +416,25 @@ export default function UsersPage() {
                             </option>
                           ))}
                         </select>
+                      </div>
+
+                      {/* Custom Role Selection */}
+                      <div className="md:col-span-2">
+                        <label className="label">Dynamic Custom Role (Overrides Default Permissions)</label>
+                        <select
+                          name="customRoleId"
+                          value={editForm.customRoleId}
+                          onChange={handleEditChange}
+                          className="w-full px-4 py-3 bg-epr-green-50 border border-epr-green-100 rounded-xl outline-none focus:ring-4 focus:ring-epr-green-500/10 font-bold text-epr-green-700"
+                        >
+                          <option value="">None (Use Standard Base Role)</option>
+                          {customRoles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.name} ({role.level} Level)
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1 ml-1">Assigning a custom role grants surgical module permissions established in settings.</p>
                       </div>
 
                       <div className="flex items-center space-x-2 mt-6">
@@ -477,55 +497,58 @@ export default function UsersPage() {
               )}
             </div>
           </div>
-        )}
+        )
+        }
 
         {/* Confirmation Dialog */}
-        {confirmOpen && confirmUser && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-              <div className="px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold text-gray-900">Please Confirm</h3>
-              </div>
-              <div className="px-6 py-4 space-y-2">
-                <p className="text-sm text-gray-700">
-                  {confirmAction === "delete"
-                    ? `Delete user ${confirmUser.firstName} ${confirmUser.lastName}? This cannot be undone.`
-                    : `${confirmUser.isActive ? "Deactivate" : "Activate"} user ${confirmUser.firstName} ${confirmUser.lastName}?`}
-                </p>
-              </div>
-              <div className="px-6 py-4 border-t flex justify-end space-x-3">
-                <button
-                  onClick={() => {
-                    setConfirmOpen(false);
-                    setConfirmAction(null);
-                    setConfirmUser(null);
-                  }}
-                  className="btn btn-ghost"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!confirmUser || !confirmAction) return;
-                    setConfirmOpen(false);
-                    if (confirmAction === "toggle") {
-                      await toggleActive(confirmUser);
-                    } else if (confirmAction === "delete") {
-                      await deleteUser(confirmUser);
-                    }
-                    setConfirmAction(null);
-                    setConfirmUser(null);
-                  }}
-                  className={`btn ${confirmAction === "delete" ? "btn-danger" : "btn-primary"
-                    }`}
-                >
-                  Confirm
-                </button>
+        {
+          confirmOpen && confirmUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+                <div className="px-6 py-4 border-b">
+                  <h3 className="text-lg font-semibold text-gray-900">Please Confirm</h3>
+                </div>
+                <div className="px-6 py-4 space-y-2">
+                  <p className="text-sm text-gray-700">
+                    {confirmAction === "delete"
+                      ? `Delete user ${confirmUser.firstName} ${confirmUser.lastName}? This cannot be undone.`
+                      : `${confirmUser.isActive ? "Deactivate" : "Activate"} user ${confirmUser.firstName} ${confirmUser.lastName}?`}
+                  </p>
+                </div>
+                <div className="px-6 py-4 border-t flex justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      setConfirmOpen(false);
+                      setConfirmAction(null);
+                      setConfirmUser(null);
+                    }}
+                    className="btn btn-ghost"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirmUser || !confirmAction) return;
+                      setConfirmOpen(false);
+                      if (confirmAction === "toggle") {
+                        await toggleActive(confirmUser);
+                      } else if (confirmAction === "delete") {
+                        await deleteUser(confirmUser);
+                      }
+                      setConfirmAction(null);
+                      setConfirmUser(null);
+                    }}
+                    className={`btn ${confirmAction === "delete" ? "btn-danger" : "btn-primary"
+                      }`}
+                  >
+                    Confirm
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
       </>
-    </AppShell>
+    </AppShell >
   );
 }

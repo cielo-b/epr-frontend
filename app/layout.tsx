@@ -11,8 +11,8 @@ const plexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "RMSoft MIS - Management Information System",
-  description: "Comprehensive project management system for RMSoft",
+  title: "EPR Church Management System",
+  description: "Official Management System for Eglise Presbyterienne au Rwanda",
   icons: {
     icon: '/img/logo.png',
     shortcut: '/img/logo.png',

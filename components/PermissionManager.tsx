@@ -22,8 +22,8 @@ interface PermissionManagerProps {
     userName: string;
 }
 
-const RESOURCES = ["PROJECT", "TASK", "DOCUMENT", "REPORT", "COMMENT", "ACTIVITY"];
-const ACTIONS = ["VIEW", "CREATE", "UPDATE", "DELETE", "DOWNLOAD", "UPLOAD", "ASSIGN"];
+const RESOURCES = ["CLERGY", "MEMBERS", "EXPENSES", "EVENTS", "CONTRIBUTIONS", "SACRAMENTS", "PRESBYTERIES", "PARISHES", "COMMUNITIES", "SETTINGS", "AUDIT_LOGS"];
+const ACTIONS = ["VIEW", "CREATE", "UPDATE", "DELETE", "APPROVE", "PRINT", "EXPORT"];
 
 export default function PermissionManager({ userId, userName }: PermissionManagerProps) {
     const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -115,10 +115,12 @@ export default function PermissionManager({ userId, userName }: PermissionManage
                 return <Edit className="h-4 w-4" />;
             case "DELETE":
                 return <Trash className="h-4 w-4" />;
-            case "DOWNLOAD":
+            case "PRINT":
+                return <Plus className="h-4 w-4" />;
+            case "EXPORT":
                 return <Download className="h-4 w-4" />;
-            case "UPLOAD":
-                return <Upload className="h-4 w-4" />;
+            case "APPROVE":
+                return <Lock className="h-4 w-4 text-green-600" />;
             default:
                 return <Lock className="h-4 w-4" />;
         }
