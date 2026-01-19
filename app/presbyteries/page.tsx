@@ -8,14 +8,20 @@ import api from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { TableSkeleton } from "@/components/Skeleton";
-import { Church, MapPin, Users, Plus, Edit, Trash2, BarChart3, X } from "lucide-react";
+import { Church, MapPin, Users, Plus, Edit, Trash2, BarChart3, X, LayoutGrid, List, Download, Upload } from "lucide-react";
 
 interface Presbytery {
     id: string;
     name: string;
+    description?: string;
     location?: string;
+    region?: string;
     leaderName?: string;
     leaderPhone?: string;
+    leaderEmail?: string;
+    officeAddress?: string;
+    officePhone?: string;
+    officeEmail?: string;
     totalParishes: number;
     totalCommunities: number;
     totalMembers: number;
@@ -32,8 +38,11 @@ export default function PresbyteriesPage() {
     const { addToast } = useToast();
     const [confirmDelete, setConfirmDelete] = useState<{ id: string; isOpen: boolean }>({ id: "", isOpen: false });
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         name: "",
+        description: "",
         location: "",
         region: "",
         leaderName: "",
@@ -54,6 +63,21 @@ export default function PresbyteriesPage() {
         loadPresbyteries();
     }, [router]);
 
+    // Handle edit query parameter
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const editId = params.get('edit');
+
+        if (editId && presbyteries.length > 0) {
+            const presbyteryToEdit = presbyteries.find(p => p.id === editId);
+            if (presbyteryToEdit) {
+                handleEdit(presbyteryToEdit);
+                // Clean up URL
+                window.history.replaceState({}, '', '/presbyteries');
+            }
+        }
+    }, [presbyteries]);
+
     const loadPresbyteries = async () => {
         setLoading(true);
         try {
@@ -68,16 +92,20 @@ export default function PresbyteriesPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
         try {
             if (editingId) {
                 await api.patch(`/presbyteries/${editingId}`, formData);
+                addToast(`Presbytery "${formData.name}" updated successfully!`, "success");
             } else {
                 await api.post("/presbyteries", formData);
+                addToast(`Presbytery "${formData.name}" created successfully!`, "success");
             }
             setShowModal(false);
             setEditingId(null);
             setFormData({
                 name: "",
+                description: "",
                 location: "",
                 region: "",
                 leaderName: "",
@@ -88,9 +116,87 @@ export default function PresbyteriesPage() {
                 officeEmail: "",
             });
             loadPresbyteries();
-            addToast(`Presbytery ${editingId ? 'updated' : 'created'} successfully!`, "success");
         } catch (error: any) {
-            addToast(error.response?.data?.message || "Operation failed", "error");
+            const errorMessage = error.response?.data?.message;
+            if (Array.isArray(errorMessage)) {
+                addToast(errorMessage.join(", "), "error");
+            } else if (errorMessage) {
+                addToast(errorMessage, "error");
+            } else if (error.response?.status === 409) {
+                addToast("A presbytery with this name already exists", "error");
+            } else if (error.response?.status === 400) {
+                addToast("Please check all required fields and try again", "error");
+            } else {
+                addToast("Failed to save presbytery. Please try again.", "error");
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleExport = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/data/template/presbyteries`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to download template');
+            }
+
+            // Get the blob from the response
+            const blob = await response.blob();
+
+            // Create a download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'presbyteries_template.xlsx';
+            document.body.appendChild(a);
+            a.click();
+
+            // Cleanup
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            addToast("Template downloaded successfully", "success");
+        } catch (error) {
+            console.error('Download error:', error);
+            addToast("Failed to download template", "error");
+        }
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            setLoading(true);
+            const res = await api.post('/data/import/presbyteries', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            addToast(`Import successful! ${res.data.success || res.data.imported || 0} presbyteries imported.`, "success");
+            loadPresbyteries();
+            e.target.value = '';
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message;
+            if (Array.isArray(errorMessage)) {
+                addToast(`Import failed: ${errorMessage.join(", ")}`, "error");
+            } else if (errorMessage) {
+                addToast(`Import failed: ${errorMessage}`, "error");
+            } else {
+                addToast("Import failed. Please check your file format and try again.", "error");
+            }
+            e.target.value = '';
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -98,14 +204,15 @@ export default function PresbyteriesPage() {
         setEditingId(presbytery.id);
         setFormData({
             name: presbytery.name,
+            description: presbytery.description || "",
             location: presbytery.location || "",
-            region: "",
+            region: presbytery.region || "",
             leaderName: presbytery.leaderName || "",
             leaderPhone: presbytery.leaderPhone || "",
-            leaderEmail: "",
-            officeAddress: "",
-            officePhone: "",
-            officeEmail: "",
+            leaderEmail: presbytery.leaderEmail || "",
+            officeAddress: presbytery.officeAddress || "",
+            officePhone: presbytery.officePhone || "",
+            officeEmail: presbytery.officeEmail || "",
         });
         setShowModal(true);
     };
@@ -148,36 +255,64 @@ export default function PresbyteriesPage() {
                             {presbyteries.length} presbyteries registered
                         </p>
                     </div>
-                    <button
-                        onClick={() => {
-                            setEditingId(null);
-                            setFormData({
-                                name: "",
-                                location: "",
-                                region: "",
-                                leaderName: "",
-                                leaderPhone: "",
-                                leaderEmail: "",
-                                officeAddress: "",
-                                officePhone: "",
-                                officeEmail: "",
-                            });
-                            setShowModal(true);
-                        }}
-                        className="btn-epr"
-                    >
-                        <Plus className="h-5 w-5 mr-2" />
-                        Add Presbytery
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <div className="flex p-1 bg-gray-100 rounded-lg mr-2">
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={`p-2 rounded-md ${viewMode === "grid" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <LayoutGrid className="h-5 w-5" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode("list")}
+                                className={`p-2 rounded-md ${viewMode === "list" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <List className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <button
+                            onClick={handleExport}
+                            className="p-3 text-gray-400 hover:text-epr-green-600 hover:bg-epr-green-50 bg-white border border-gray-200 rounded-xl transition-all shadow-sm"
+                            title="Download Excel Template"
+                        >
+                            <Download className="h-5 w-5" />
+                        </button>
+                        <label className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 bg-white border border-gray-200 rounded-xl transition-all cursor-pointer shadow-sm" title="Bulk Import Presbyteries">
+                            <Upload className="h-5 w-5" />
+                            <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleImport} />
+                        </label>
+                        <button
+                            onClick={() => {
+                                setEditingId(null);
+                                setFormData({
+                                    name: "",
+                                    description: "",
+                                    location: "",
+                                    region: "",
+                                    leaderName: "",
+                                    leaderPhone: "",
+                                    leaderEmail: "",
+                                    officeAddress: "",
+                                    officePhone: "",
+                                    officeEmail: "",
+                                });
+                                setShowModal(true);
+                            }}
+                            className="btn-epr"
+                        >
+                            <Plus className="h-5 w-5 mr-2" />
+                            Add Presbytery
+                        </button>
+                    </div>
                 </div>
 
-                {/* Presbyteries Grid */}
+                {/* Presbyteries Content */}
                 {loading ? (
                     <div className="text-center py-12">
                         <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-epr-green-600 border-r-transparent"></div>
                         <p className="mt-4 text-gray-600">Loading presbyteries...</p>
                     </div>
-                ) : (
+                ) : viewMode === "grid" ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {presbyteries.map((presbytery) => (
                             <div
@@ -265,6 +400,66 @@ export default function PresbyteriesPage() {
                             </div>
                         ))}
                     </div>
+                ) : (
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200">
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Presbytery Name</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Location</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Leader</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Parishes</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Communities</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Members</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {presbyteries.map((p) => (
+                                    <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900">{p.name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {p.location || "---"}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            <div className="font-medium">{p.leaderName || "---"}</div>
+                                            <div className="text-xs text-gray-400">{p.leaderPhone}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-900 font-bold text-center">{p.totalParishes}</td>
+                                        <td className="px-6 py-4 text-sm text-epr-gold-600 font-bold text-center">{p.totalCommunities}</td>
+                                        <td className="px-6 py-4 text-sm text-blue-600 font-bold text-center">{p.totalMembers.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => router.push(`/presbyteries/${p.id}`)}
+                                                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                                                    title="View Details"
+                                                >
+                                                    <BarChart3 className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleEdit(p)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                    title="Edit"
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => setConfirmDelete({ id: p.id, isOpen: true })}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
 
                 {/* Modal */}
@@ -295,6 +490,19 @@ export default function PresbyteriesPage() {
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         className="input-premium"
                                         placeholder="e.g., Gitarama"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        value={formData.description || ""}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        className="input-premium min-h-[80px]"
+                                        placeholder="Brief description of the presbytery..."
+                                        rows={3}
                                     />
                                 </div>
 
@@ -415,9 +623,10 @@ export default function PresbyteriesPage() {
                                     </button>
                                     <button
                                         type="submit"
-                                        className="btn-epr flex-[2] py-4 text-xs tracking-widest"
+                                        disabled={isSubmitting}
+                                        className="btn-epr flex-[2] py-4 text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {editingId ? "UPDATE PRESBYTERY" : "CREATE PRESBYTERY"}
+                                        {isSubmitting ? "SAVING..." : (editingId ? "UPDATE PRESBYTERY" : "CREATE PRESBYTERY")}
                                     </button>
                                 </div>
                             </form>

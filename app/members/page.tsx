@@ -28,7 +28,9 @@ import {
     UserCheck,
     Award,
     Heart,
-    Upload
+    Upload,
+    LayoutGrid,
+    List
 } from "lucide-react";
 
 interface Member {
@@ -73,7 +75,7 @@ export default function MembersPage() {
     const { addToast } = useToast();
     const [confirmDelete, setConfirmDelete] = useState<{ id: string; isOpen: boolean }>({ id: "", isOpen: false });
     const [isActionLoading, setIsActionLoading] = useState(false);
-
+    const [viewMode, setViewMode] = useState<"grid" | "list">("list");
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -310,6 +312,20 @@ export default function MembersPage() {
                     </div>
 
                     <div className="flex gap-3 w-full lg:w-auto">
+                        <div className="flex p-1 bg-gray-100 rounded-lg mr-2">
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={`p-2 rounded-md ${viewMode === "grid" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <LayoutGrid className="h-5 w-5" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode("list")}
+                                className={`p-2 rounded-md ${viewMode === "list" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <List className="h-5 w-5" />
+                            </button>
+                        </div>
                         <button
                             onClick={handleExport}
                             className="p-3 text-gray-400 hover:text-epr-green-600 hover:bg-epr-green-50 bg-white border border-gray-200 rounded-xl transition-all shadow-sm"
@@ -375,90 +391,156 @@ export default function MembersPage() {
                     </div>
                 </div>
 
-                {/* Members Table */}
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Member Info</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Affiliation</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Sacraments</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Contact</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Status</th>
-                                    <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {loading ? (
-                                    Array(5).fill(0).map((_, i) => (
-                                        <tr key={i} className="animate-pulse">
-                                            <td colSpan={6} className="px-6 py-4 h-20 bg-gray-50/50"></td>
-                                        </tr>
-                                    ))
-                                ) : members.map((m) => (
-                                    <tr key={m.id} className="hover:bg-gray-50/80 transition-colors group">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 rounded-full bg-epr-green-100 flex items-center justify-center text-epr-green-700 font-bold shrink-0">
-                                                    {m.firstName[0]}{m.lastName[0]}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-gray-900 group-hover:text-epr-green-700 transition-colors">{m.firstName} {m.lastName}</p>
-                                                    <p className="text-xs font-mono text-gray-500">#{m.membershipNumber}</p>
-                                                </div>
+                {/* Members Content */}
+                {viewMode === "grid" ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {loading ? (
+                            Array(8).fill(0).map((_, i) => (
+                                <div key={i} className="bg-white border border-gray-200 rounded-xl p-6 h-64 animate-pulse"></div>
+                            ))
+                        ) : (
+                            members.map((m) => (
+                                <div key={m.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all group relative">
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="h-12 w-12 rounded-full bg-epr-green-100 flex items-center justify-center text-epr-green-700 font-bold text-lg">
+                                            {m.firstName[0]}{m.lastName[0]}
+                                        </div>
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${getStatusColor(m.status)}`}>
+                                            {m.status}
+                                        </span>
+                                    </div>
+
+                                    <h3 className="font-bold text-gray-900 text-lg mb-1">{m.firstName} {m.lastName}</h3>
+                                    <p className="text-xs font-mono text-gray-500 mb-4">#{m.membershipNumber}</p>
+
+                                    <div className="space-y-2 text-sm text-gray-600 mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="h-4 w-4 text-gray-400" />
+                                            <span className="truncate">{m.parish?.name}</span>
+                                        </div>
+                                        {m.community && (
+                                            <div className="flex items-center gap-2">
+                                                <Users className="h-4 w-4 text-gray-400" />
+                                                <span className="truncate">{m.community.name}</span>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm font-semibold text-gray-700">{m.parish?.name}</div>
-                                            <div className="text-xs text-gray-500">{m.community?.name || "No Community"}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex gap-1.5">
-                                                <Award className={`h-4 w-4 ${m.isBaptized ? 'text-blue-500' : 'text-gray-200'}`} />
-                                                <UserCheck className={`h-4 w-4 ${m.isConfirmed ? 'text-epr-green-600' : 'text-gray-200'}`} />
-                                                <Heart className={`h-4 w-4 ${m.isMarried ? 'text-red-500' : 'text-gray-200'}`} />
+                                        )}
+                                        {m.phone && (
+                                            <div className="flex items-center gap-2">
+                                                <Phone className="h-4 w-4 text-gray-400" />
+                                                <span>{m.phone}</span>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                                                    <Phone className="h-3 w-3 text-gray-400" />
-                                                    {m.phone || "N/A"}
-                                                </div>
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                                                    <Mail className="h-3 w-3 text-gray-400" />
-                                                    {m.email || "N/A"}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${getStatusColor(m.status)}`}>
-                                                {m.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => handleEdit(m)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                                                    <Edit className="h-4 w-4" />
-                                                </button>
-                                                <button onClick={() => setConfirmDelete({ id: m.id, isOpen: true })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-2 pt-4 border-t border-gray-100">
+                                        <div className="flex gap-1">
+                                            <Award className={`h-4 w-4 ${m.isBaptized ? 'text-blue-500' : 'text-gray-200'}`} title="Baptized" />
+                                            <UserCheck className={`h-4 w-4 ${m.isConfirmed ? 'text-epr-green-600' : 'text-gray-200'}`} title="Confirmed" />
+                                            <Heart className={`h-4 w-4 ${m.isMarried ? 'text-red-500' : 'text-gray-200'}`} title="Married" />
+                                        </div>
+                                        <div className="flex-1"></div>
+                                        <button onClick={() => handleEdit(m)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                            <Edit className="h-4 w-4" />
+                                        </button>
+                                        <button onClick={() => setConfirmDelete({ id: m.id, isOpen: true })} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        {!loading && members.length === 0 && (
+                            <div className="col-span-full py-20 text-center flex flex-col items-center">
+                                <Users className="h-16 w-16 text-gray-200 mb-4" />
+                                <p className="text-gray-500 font-medium">No members found in the registry.</p>
+                            </div>
+                        )}
                     </div>
-                    {!loading && members.length === 0 && (
-                        <div className="py-20 text-center flex flex-col items-center">
-                            <Users className="h-16 w-16 text-gray-200 mb-4" />
-                            <p className="text-gray-500 font-medium">No members found in the registry.</p>
+                ) : (
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-200">
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Member Info</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Affiliation</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Sacraments</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Contact</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {loading ? (
+                                        Array(5).fill(0).map((_, i) => (
+                                            <tr key={i} className="animate-pulse">
+                                                <td colSpan={6} className="px-6 py-4 h-20 bg-gray-50/50"></td>
+                                            </tr>
+                                        ))
+                                    ) : members.map((m) => (
+                                        <tr key={m.id} className="hover:bg-gray-50/80 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-full bg-epr-green-100 flex items-center justify-center text-epr-green-700 font-bold shrink-0">
+                                                        {m.firstName[0]}{m.lastName[0]}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-gray-900 group-hover:text-epr-green-700 transition-colors">{m.firstName} {m.lastName}</p>
+                                                        <p className="text-xs font-mono text-gray-500">#{m.membershipNumber}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-semibold text-gray-700">{m.parish?.name}</div>
+                                                <div className="text-xs text-gray-500">{m.community?.name || "No Community"}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex gap-1.5">
+                                                    <Award className={`h-4 w-4 ${m.isBaptized ? 'text-blue-500' : 'text-gray-200'}`} />
+                                                    <UserCheck className={`h-4 w-4 ${m.isConfirmed ? 'text-epr-green-600' : 'text-gray-200'}`} />
+                                                    <Heart className={`h-4 w-4 ${m.isMarried ? 'text-red-500' : 'text-gray-200'}`} />
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                                                        <Phone className="h-3 w-3 text-gray-400" />
+                                                        {m.phone || "N/A"}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                                                        <Mail className="h-3 w-3 text-gray-400" />
+                                                        {m.email || "N/A"}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${getStatusColor(m.status)}`}>
+                                                    {m.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => handleEdit(m)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                        <Edit className="h-4 w-4" />
+                                                    </button>
+                                                    <button onClick={() => setConfirmDelete({ id: m.id, isOpen: true })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                    )}
-                </div>
+                        {!loading && members.length === 0 && (
+                            <div className="py-20 text-center flex flex-col items-center">
+                                <Users className="h-16 w-16 text-gray-200 mb-4" />
+                                <p className="text-gray-500 font-medium">No members found in the registry.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Member Registry Modal */}

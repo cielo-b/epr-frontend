@@ -8,7 +8,7 @@ import api from "@/lib/api";
 import { useToast } from "@/components/ToastProvider";
 import { ConfirmationModal } from "@/components/ConfirmationModal";
 import { TableSkeleton } from "@/components/Skeleton";
-import { Users, MapPin, Phone, Mail, Calendar, Plus, Search, Filter, Edit, Trash2, X } from "lucide-react";
+import { Users, MapPin, Phone, Mail, Calendar, Plus, Search, Filter, Edit, Trash2, X, LayoutGrid, List } from "lucide-react";
 
 interface Community {
     id: string;
@@ -52,6 +52,7 @@ export default function CommunitiesPage() {
     const { addToast } = useToast();
     const [confirmDelete, setConfirmDelete] = useState<{ id: string; isOpen: boolean }>({ id: "", isOpen: false });
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
     const [formData, setFormData] = useState({
         name: "",
         code: "",
@@ -227,16 +228,32 @@ export default function CommunitiesPage() {
                             </button>
                         </div>
                     </div>
-                    <button
-                        onClick={() => {
-                            resetForm();
-                            setShowModal(true);
-                        }}
-                        className="btn-epr"
-                    >
-                        <Plus className="h-5 w-5 mr-2" />
-                        Add Community
-                    </button>
+                    <div className="flex gap-2">
+                        <div className="flex p-1 bg-gray-100 rounded-lg mr-2">
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={`p-2 rounded-md ${viewMode === "grid" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <LayoutGrid className="h-5 w-5" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode("list")}
+                                className={`p-2 rounded-md ${viewMode === "list" ? "bg-white shadow-sm text-epr-green-600" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                                <List className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => {
+                                resetForm();
+                                setShowModal(true);
+                            }}
+                            className="btn-epr"
+                        >
+                            <Plus className="h-5 w-5 mr-2" />
+                            Add Community
+                        </button>
+                    </div>
                 </div>
 
                 {/* Filters */}
@@ -316,13 +333,13 @@ export default function CommunitiesPage() {
                     </div>
                 </div>
 
-                {/* Communities Grid */}
+                {/* Communities Content */}
                 {loading ? (
                     <div className="text-center py-12">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-epr-green-600"></div>
                         <p className="mt-4 text-gray-600">Loading communities...</p>
                     </div>
-                ) : (
+                ) : viewMode === "grid" ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredCommunities.map((community) => (
                             <div
@@ -401,6 +418,53 @@ export default function CommunitiesPage() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                ) : (
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200">
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Community Name</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Parish</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Leader</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Members</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Families</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Status</th>
+                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {filteredCommunities.map((c) => (
+                                    <tr key={c.id} className="hover:bg-gray-50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900">{c.name}</div>
+                                            <div className="text-xs text-epr-green-600 font-mono">{c.code}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{c.parish?.name}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            <div className="font-medium">{c.leaderName || "---"}</div>
+                                            <div className="text-xs text-gray-400">{c.leaderPhone}</div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-epr-green-600 font-bold text-center">{c.totalMembers}</td>
+                                        <td className="px-6 py-4 text-sm text-blue-600 font-bold text-center">{c.totalFamilies}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span
+                                                className={`px-2 py-1 text-xs rounded-full font-semibold ${c.isActive
+                                                    ? "bg-green-100 text-green-800"
+                                                    : "bg-gray-100 text-gray-800"
+                                                    }`}
+                                            >
+                                                {c.isActive ? "Active" : "Inactive"}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button onClick={() => handleEdit(c)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg mr-2"><Edit className="h-4 w-4" /></button>
+                                            <button onClick={() => setConfirmDelete({ id: c.id, isOpen: true })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="h-4 w-4" /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
 
