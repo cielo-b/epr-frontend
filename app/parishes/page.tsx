@@ -21,7 +21,10 @@ import {
     X,
     Users,
     LayoutGrid,
-    List as ListIcon
+    List as ListIcon,
+    Download,
+    Upload,
+    Eye
 } from "lucide-react";
 
 interface Parish {
@@ -63,16 +66,22 @@ export default function ParishesPage() {
     const { addToast } = useToast();
     const [confirmDelete, setConfirmDelete] = useState<{ id: string; isOpen: boolean }>({ id: "", isOpen: false });
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         name: "",
-        code: "",
         description: "",
         presbyteryId: "",
         location: "",
-        address: "",
-        phone: "",
-        email: "",
+        district: "",
+        sector: "",
         pastorName: "",
+        pastorEmail: "",
+        pastorPhone: "",
+        administratorName: "",
+        churchAddress: "",
+        churchPhone: "",
+        churchEmail: "",
+        foundedDate: "",
     });
 
     useEffect(() => {
@@ -84,6 +93,21 @@ export default function ParishesPage() {
         setUser(currentUser);
         loadData();
     }, [router]);
+
+    // Handle edit query parameter
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const editId = params.get('edit');
+
+        if (editId && parishes.length > 0) {
+            const parishToEdit = parishes.find(p => p.id === editId);
+            if (parishToEdit) {
+                handleEdit(parishToEdit);
+                // Clean up URL
+                window.history.replaceState({}, '', '/parishes');
+            }
+        }
+    }, [parishes]);
 
     const loadData = async () => {
         setLoading(true);
@@ -128,18 +152,102 @@ export default function ParishesPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsSubmitting(true);
         try {
+            // Clean up empty strings for optional email and date fields
+            const cleanedData = {
+                ...formData,
+                pastorEmail: formData.pastorEmail || undefined,
+                churchEmail: formData.churchEmail || undefined,
+                foundedDate: formData.foundedDate || undefined,
+            };
+
             if (editingParish) {
-                await api.patch(`/parishes/${editingParish.id}`, formData);
+                await api.patch(`/parishes/${editingParish.id}`, cleanedData);
+                addToast(`Parish "${formData.name}" updated successfully!`, "success");
             } else {
-                await api.post("/parishes", formData);
+                await api.post("/parishes", cleanedData);
+                addToast(`Parish "${formData.name}" registered successfully!`, "success");
             }
             setShowModal(false);
             resetForm();
             loadData();
-            addToast(`Parish ${editingParish ? 'updated' : 'registered'} successfully!`, "success");
         } catch (error: any) {
-            addToast(error.response?.data?.message || "Operation failed", "error");
+            const errorMessage = error.response?.data?.message;
+            if (Array.isArray(errorMessage)) {
+                addToast(errorMessage.join(", "), "error");
+            } else if (errorMessage) {
+                addToast(errorMessage, "error");
+            } else if (error.response?.status === 409) {
+                addToast("A parish with this code already exists", "error");
+            } else if (error.response?.status === 400) {
+                addToast("Please check all required fields and try again", "error");
+            } else {
+                addToast("Failed to save parish. Please try again.", "error");
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleExport = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/data/template/parishes`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to download template');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'parishes_template.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            addToast("Template downloaded successfully", "success");
+        } catch (error) {
+            console.error('Download error:', error);
+            addToast("Failed to download template", "error");
+        }
+    };
+
+    const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            setLoading(true);
+            const res = await api.post('/data/import/parishes', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            addToast(`Import successful! ${res.data.success || res.data.imported || 0} parishes imported.`, "success");
+            loadData();
+            e.target.value = '';
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message;
+            if (Array.isArray(errorMessage)) {
+                addToast(`Import failed: ${errorMessage.join(", ")}`, "error");
+            } else if (errorMessage) {
+                addToast(`Import failed: ${errorMessage}`, "error");
+            } else {
+                addToast("Import failed. Please check your file format and try again.", "error");
+            }
+            e.target.value = '';
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -147,14 +255,19 @@ export default function ParishesPage() {
         setEditingParish(parish);
         setFormData({
             name: parish.name,
-            code: parish.code,
             description: parish.description || "",
             presbyteryId: parish.presbyteryId,
             location: parish.location || "",
-            address: parish.address || "",
-            phone: parish.phone || "",
-            email: parish.email || "",
+            district: (parish as any).district || "",
+            sector: (parish as any).sector || "",
             pastorName: parish.pastorName || "",
+            pastorEmail: (parish as any).pastorEmail || "",
+            pastorPhone: (parish as any).pastorPhone || "",
+            administratorName: (parish as any).administratorName || "",
+            churchAddress: (parish as any).churchAddress || "",
+            churchPhone: (parish as any).churchPhone || "",
+            churchEmail: (parish as any).churchEmail || "",
+            foundedDate: (parish as any).foundedDate || "",
         });
         setShowModal(true);
     };
@@ -176,14 +289,19 @@ export default function ParishesPage() {
     const resetForm = () => {
         setFormData({
             name: "",
-            code: "",
             description: "",
             presbyteryId: "",
             location: "",
-            address: "",
-            phone: "",
-            email: "",
+            district: "",
+            sector: "",
             pastorName: "",
+            pastorEmail: "",
+            pastorPhone: "",
+            administratorName: "",
+            churchAddress: "",
+            churchPhone: "",
+            churchEmail: "",
+            foundedDate: "",
         });
         setEditingParish(null);
     };
@@ -242,12 +360,22 @@ export default function ParishesPage() {
                             </button>
                         </div>
                         <button
+                            onClick={handleExport}
+                            className="p-3 text-gray-400 hover:text-epr-green-600 hover:bg-epr-green-50 bg-white border border-gray-200 rounded-xl transition-all shadow-sm"
+                            title="Download Excel Template"
+                        >
+                            <Download className="h-5 w-5" />
+                        </button>
+                        <label className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-50 bg-white border border-gray-200 rounded-xl transition-all cursor-pointer shadow-sm" title="Bulk Import Parishes">
+                            <Upload className="h-5 w-5" />
+                            <input type="file" className="hidden" accept=".xlsx,.xls" onChange={handleImport} />
+                        </label>
+                        <button
                             onClick={() => {
                                 resetForm();
                                 setShowModal(true);
                             }}
-                            className="btn-epr"
-                        >
+                            className="btn-epr">
                             <Plus className="h-5 w-5" />
                             New Parish
                         </button>
@@ -300,280 +428,288 @@ export default function ParishesPage() {
                 </div>
 
                 {/* Main Content */}
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-epr-green-100 border-t-epr-green-600 mb-4"></div>
-                        <p className="text-gray-500 font-medium">Fetching parishes records...</p>
-                    </div>
-                ) : viewMode === "grid" ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {parishes.map((parish) => (
-                            <div
-                                key={parish.id}
-                                className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 group"
-                            >
-                                <div className="bg-epr-green-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white rounded-lg shadow-sm">
-                                            <Church className="h-6 w-6 text-epr-green-600" />
+                {
+                    loading ? (
+                        <div className="flex flex-col items-center justify-center py-20">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-epr-green-100 border-t-epr-green-600 mb-4"></div>
+                            <p className="text-gray-500 font-medium">Fetching parishes records...</p>
+                        </div>
+                    ) : viewMode === "grid" ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {parishes.map((parish) => (
+                                <div
+                                    key={parish.id}
+                                    className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 group"
+                                >
+                                    <div className="bg-epr-green-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-white rounded-lg shadow-sm">
+                                                <Church className="h-6 w-6 text-epr-green-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-gray-900 group-hover:text-epr-green-700 transition-colors">{parish.name}</h3>
+                                                <p className="text-xs font-mono text-epr-green-600 bg-epr-green-100 px-2 rounded-full inline-block mt-1">
+                                                    {parish.code}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 group-hover:text-epr-green-700 transition-colors">{parish.name}</h3>
-                                            <p className="text-xs font-mono text-epr-green-600 bg-epr-green-100 px-2 rounded-full inline-block mt-1">
-                                                {parish.code}
-                                            </p>
+                                        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => router.push(`/parishes/${parish.id}`)}
+                                                className="p-1.5 text-epr-green-600 hover:bg-epr-green-100 rounded-md transition-colors"
+                                                title="View Details"
+                                            >
+                                                <Eye className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleEdit(parish)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                                title="Edit Parish"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => setConfirmDelete({ id: parish.id, isOpen: true })}
+                                                className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
+                                                title="Delete Parish"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={() => handleEdit(parish)}
-                                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
-                                        >
-                                            <Edit className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => setConfirmDelete({ id: parish.id, isOpen: true })}
-                                            className="p-1.5 text-red-600 hover:bg-red-100 rounded-md transition-colors"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+
+                                    <div className="p-6 space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Presbytery</p>
+                                                <p className="text-sm font-semibold text-gray-900">{parish.presbytery?.name || "N/A"}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Pastor In Charge</p>
+                                                <p className="text-sm font-semibold text-gray-900 truncate">{parish.pastorName || "Unassigned"}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            {parish.location && (
+                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                    <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+                                                    <span className="truncate">{parish.location}</span>
+                                                </div>
+                                            )}
+                                            {parish.phone && (
+                                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                                    <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                                                    <span>{parish.phone}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="pt-4 flex items-center justify-around border-t border-gray-100">
+                                            <div className="text-center">
+                                                <p className="text-xl font-bold text-gray-900">{parish.totalCommunities}</p>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Communities</p>
+                                            </div>
+                                            <div className="h-8 w-[1px] bg-gray-100"></div>
+                                            <div className="text-center">
+                                                <p className="text-xl font-bold text-epr-green-600">{parish.totalMembers}</p>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Members</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-
-                                <div className="p-6 space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Presbytery</p>
-                                            <p className="text-sm font-semibold text-gray-900">{parish.presbytery?.name || "N/A"}</p>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Pastor In Charge</p>
-                                            <p className="text-sm font-semibold text-gray-900 truncate">{parish.pastorName || "Unassigned"}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        {parish.location && (
-                                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
-                                                <span className="truncate">{parish.location}</span>
-                                            </div>
-                                        )}
-                                        {parish.phone && (
-                                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                <Phone className="h-4 w-4 text-gray-400 shrink-0" />
-                                                <span>{parish.phone}</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="pt-4 flex items-center justify-around border-t border-gray-100">
-                                        <div className="text-center">
-                                            <p className="text-xl font-bold text-gray-900">{parish.totalCommunities}</p>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Communities</p>
-                                        </div>
-                                        <div className="h-8 w-[1px] bg-gray-100"></div>
-                                        <div className="text-center">
-                                            <p className="text-xl font-bold text-epr-green-600">{parish.totalMembers}</p>
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Members</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-gray-50 border-b border-gray-200">
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Parish Name</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Presbytery</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Pastor</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Communities</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Members</th>
-                                    <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {parishes.map((p) => (
-                                    <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{p.name}</div>
-                                            <div className="text-xs text-epr-green-600 font-mono">{p.code}</div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{p.presbytery?.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{p.pastorName || "---"}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-900 font-bold text-center">{p.totalCommunities}</td>
-                                        <td className="px-6 py-4 text-sm text-epr-green-600 font-bold text-center">{p.totalMembers}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => handleEdit(p)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg mr-2"><Edit className="h-4 w-4" /></button>
-                                            <button onClick={() => setConfirmDelete({ id: p.id, isOpen: true })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="h-4 w-4" /></button>
-                                        </td>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-200">
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Parish Name</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Presbytery</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Pastor</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Communities</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Members</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {parishes.map((p) => (
+                                        <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-gray-900">{p.name}</div>
+                                                <div className="text-xs text-epr-green-600 font-mono">{p.code}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">{p.presbytery?.name}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">{p.pastorName || "---"}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-900 font-bold text-center">{p.totalCommunities}</td>
+                                            <td className="px-6 py-4 text-sm text-epr-green-600 font-bold text-center">{p.totalMembers}</td>
+                                            <td className="px-6 py-4 text-right flex justify-end gap-1">
+                                                <button onClick={() => router.push(`/parishes/${p.id}`)} className="p-2 text-epr-green-600 hover:bg-epr-green-50 rounded-lg" title="View Details"><Eye className="h-4 w-4" /></button>
+                                                <button onClick={() => handleEdit(p)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit Parish"><Edit className="h-4 w-4" /></button>
+                                                <button onClick={() => setConfirmDelete({ id: p.id, isOpen: true })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete Parish"><Trash2 className="h-4 w-4" /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )
+                }
 
-                {!loading && parishes.length === 0 && (
-                    <div className="text-center py-20 bg-white border border-dashed border-gray-300 rounded-xl">
-                        <Church className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-bold text-gray-900">No parishes found</h3>
-                        <p className="text-gray-500">Try adjusting your filters or search query</p>
-                    </div>
-                )}
-            </div>
+                {
+                    !loading && parishes.length === 0 && (
+                        <div className="text-center py-20 bg-white border border-dashed border-gray-300 rounded-xl">
+                            <Church className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                            <h3 className="text-lg font-bold text-gray-900">No parishes found</h3>
+                            <p className="text-gray-500">Try adjusting your filters or search query</p>
+                        </div>
+                    )
+                }
+            </div >
 
             {/* Parish Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-100 px-8 py-6 flex justify-between items-center z-10">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-900">
-                                    {editingParish ? "Modify Parish" : "Register Parish"}
-                                </h2>
-                                <p className="text-sm text-gray-500">Enter ecclesiastical details for the parish</p>
+            {
+                showModal && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
+                            <div className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-gray-100 px-8 py-6 flex justify-between items-center z-10">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-gray-900">
+                                        {editingParish ? "Modify Parish" : "Register Parish"}
+                                    </h2>
+                                    <p className="text-sm text-gray-500">Enter ecclesiastical details for the parish</p>
+                                </div>
+                                <button
+                                    onClick={() => { setShowModal(false); resetForm(); }}
+                                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"
+                                >
+                                    <X className="h-6 w-6" />
+                                </button>
                             </div>
-                            <button
-                                onClick={() => { setShowModal(false); resetForm(); }}
-                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-all"
-                            >
-                                <X className="h-6 w-6" />
-                            </button>
-                        </div>
 
-                        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Base Identity</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-sm font-semibold text-gray-700">Parish Name *</label>
-                                            <input
-                                                type="text" required
-                                                placeholder="e.g. Kigali Central"
-                                                value={formData.name}
-                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                            />
+                            <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="md:col-span-2 space-y-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Base Identity</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <label className="text-sm font-semibold text-gray-700">Parish Name *</label>
+                                                <input
+                                                    type="text" required
+                                                    placeholder="e.g. Kigali Central"
+                                                    value={formData.name}
+                                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                                />
+                                                <p className="text-xs text-gray-500">Parish code will be auto-generated</p>
+                                            </div>
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-sm font-semibold text-gray-700">Parish Code *</label>
-                                            <input
-                                                type="text" required
-                                                placeholder="e.g. KGL-001"
-                                                value={formData.code}
-                                                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                            />
-                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Affiliated Presbytery *</label>
+                                        <select
+                                            required
+                                            value={formData.presbyteryId}
+                                            onChange={(e) => setFormData({ ...formData, presbyteryId: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        >
+                                            <option value="">Select Parent Presbytery</option>
+                                            {presbyteries.map((p) => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Pastor in Charge</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Full name of the managing pastor"
+                                            value={formData.pastorName}
+                                            onChange={(e) => setFormData({ ...formData, pastorName: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Brief History/Description</label>
+                                        <textarea
+                                            placeholder="Optional details about the parish mission or background"
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            rows={2}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">General Location</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Sector / District"
+                                            value={formData.location}
+                                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Detailed Address</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Cell / Village / St."
+                                            value={formData.churchAddress}
+                                            onChange={(e) => setFormData({ ...formData, churchAddress: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Official Phone</label>
+                                        <input
+                                            type="tel"
+                                            placeholder="+250..."
+                                            value={formData.churchPhone}
+                                            onChange={(e) => setFormData({ ...formData, churchPhone: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Official Email</label>
+                                        <input
+                                            type="email"
+                                            placeholder="parish@epr.rw"
+                                            value={formData.churchEmail}
+                                            onChange={(e) => setFormData({ ...formData, churchEmail: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-all transition-all"
+                                        />
                                     </div>
                                 </div>
 
-                                <div className="md:col-span-2 space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Affiliated Presbytery *</label>
-                                    <select
-                                        required
-                                        value={formData.presbyteryId}
-                                        onChange={(e) => setFormData({ ...formData, presbyteryId: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
+                                <div className="flex gap-4 pt-6 border-t border-gray-100 mt-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowModal(false); resetForm(); }}
+                                        className="btn-outline flex-1 py-4 text-xs tracking-widest"
                                     >
-                                        <option value="">Select Parent Presbytery</option>
-                                        {presbyteries.map((p) => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                        DISCARD
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="btn-epr flex-[2] py-4 text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSubmitting ? "SAVING..." : (editingParish ? "APPLY UPDATES" : "COMPLETE REGISTRATION")}
+                                    </button>
                                 </div>
-
-                                <div className="md:col-span-2 space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Pastor in Charge</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Full name of the managing pastor"
-                                        value={formData.pastorName}
-                                        onChange={(e) => setFormData({ ...formData, pastorName: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2 space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Brief History/Description</label>
-                                    <textarea
-                                        placeholder="Optional details about the parish mission or background"
-                                        value={formData.description}
-                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                        rows={2}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">General Location</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Sector / District"
-                                        value={formData.location}
-                                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Detailed Address</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Cell / Village / St."
-                                        value={formData.address}
-                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Official Phone</label>
-                                    <input
-                                        type="tel"
-                                        placeholder="+250..."
-                                        value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-gray-700">Official Email</label>
-                                    <input
-                                        type="email"
-                                        placeholder="parish@epr.rw"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-4 focus:ring-epr-green-500/10 focus:border-epr-green-500 outline-none transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4 pt-6 border-t border-gray-100 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowModal(false); resetForm(); }}
-                                    className="btn-outline flex-1 py-4 text-xs tracking-widest"
-                                >
-                                    DISCARD
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn-epr flex-[2] py-4 text-xs tracking-widest"
-                                >
-                                    {editingParish ? "APPLY UPDATES" : "COMPLETE REGISTRATION"}
-                                </button>
-                            </div>
-                        </form>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <ConfirmationModal
                 isOpen={confirmDelete.isOpen}
@@ -585,6 +721,6 @@ export default function ParishesPage() {
                 confirmText="Delete Permanently"
                 isLoading={isActionLoading}
             />
-        </AppShell>
+        </AppShell >
     );
 }
